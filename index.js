@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || process.env.SERVER_PORT || 5552;
 
 // Master server URL - your Render deployment
-const MASTER_SERVER = process.env.MASTER_SERVER || 'http://localhost:5553';
+const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah.onrender.com';
 
 let myBotUrl = '';
 let registrationAttempts = 0;
@@ -313,3 +313,4 @@ app.listen(port, async () => {
     autoRegister();
   }, 3000);
 });
+
