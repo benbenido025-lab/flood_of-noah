@@ -1,81 +1,504 @@
-name: RDP
-
+name: Multi-Ubuntu-RDP
 on:
   workflow_dispatch:
+    inputs:
+      instance_count:
+        description: 'Number of RDP instances (1-10)'
+        required: true
+        default: '3'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+          - '7'
+          - '8'
+          - '9'
+          - '10'
+      session_duration:
+        description: 'Session duration (minutes)'
+        required: false
+        default: '360'
 
 jobs:
-  secure-rdp:
-    runs-on: windows-latest
-    timeout-minutes: 3600
-
+  ubuntu-rdp-1:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
+    
     steps:
-      - name: Configure Core RDP Settings
+      - name: Setup RDP Instance 1
         run: |
-          # Enable Remote Desktop
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          # Disable Network Level Authentication
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-          # Remove any existing firewall rule to avoid duplication
-          netsh advfirewall firewall delete rule name="RDP-Tailscale"
-          # Allow incoming RDP connections on port 3389
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
-          # Restart Remote Desktop service
-          Restart-Service -Name TermService -Force
-      - name: Create RDP User with Secure Password
+          echo "================================"
+          echo "    RDP INSTANCE #1"
+          echo "================================"
+          echo "OS: $(lsb_release -d | cut -f2)"
+          echo "CPU: $(nproc) cores"
+          echo "RAM: $(free -h | awk '/^Mem:/ {print $2}')"
+          echo "================================"
+
+      - name: Install XFCE Desktop
         run: |
-          # Only create user if it doesn't already exist
-          if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
-              $password = "Ricardo159447!"
-              $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-              # Create user and add to groups
-              New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires -PasswordNeverExpires
-              Add-LocalGroupMember -Group "Administrators" -Member "RDP"
-              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
-              # Save credentials to GitHub environment
-              echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
-          } else {
-              Write-Host "User 'RDP' already exists. Skipping creation."
-          }
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            xfce4 xfce4-goodies dbus-x11 xorg xrdp firefox nano htop net-tools curl wget git
+
+      - name: Configure XRDP
+        run: |
+          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'EOF'
+          #!/bin/sh
+          if [ -r /etc/default/locale ]; then
+            . /etc/default/locale
+            export LANG LANGUAGE
+          fi
+          startxfce4
+          EOF
+          
+          sudo chmod +x /etc/xrdp/startwm.sh
+          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+          sudo ufw allow 3389/tcp 2>/dev/null || true
+
+      - name: Create User
+        run: |
+          sudo useradd -m -s /bin/bash rdp1
+          echo "rdp1:Pass1234!" | sudo chpasswd
+          sudo usermod -aG sudo rdp1
+          echo "RDP_USER_1=rdp1" >> $GITHUB_ENV
+          echo "RDP_PASS_1=Pass1234!" >> $GITHUB_ENV
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          echo "✅ Node.js $(node --version) installed"
+
+      - name: Install Flood of Noah
+        run: |
+          echo "🌊 Installing Flood of Noah..."
+          
+          # Setup puppeteer directory
+          sudo mkdir -p /home/runner/.config/puppeteer
+          sudo chown -R $(whoami):$(whoami) /home/runner
+          sudo chmod -R 755 /home/runner
+          
+          # Clone and install
+          cd ~
+          rm -rf flood_of-noah
+          git clone https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
+          rm -rf node_modules package-lock.json
+          npm install express axios socks puppeteer --save
+          
+          echo "✅ Flood of Noah installed at ~/flood_of-noah"
+
+      - name: Create Flood Service
+        run: |
+          sudo tee /etc/systemd/system/flood-noah-1.service > /dev/null << 'EOF'
+          [Unit]
+          Description=Flood of Noah - Instance 1
+          After=network-online.target
+          Wants=network-online.target
+          
+          [Service]
+          Type=simple
+          User=runner
+          WorkingDirectory=/home/runner/flood_of-noah
+          ExecStart=/usr/bin/node index.js
+          Restart=always
+          RestartSec=10
+          Environment=NODE_ENV=production
+          Environment=PORT=3000
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          sudo systemctl daemon-reload
+          sudo systemctl enable flood-noah-1.service
+          sudo systemctl start flood-noah-1.service
+          
+          sleep 3
+          if sudo systemctl is-active --quiet flood-noah-1.service; then
+            echo "✅ Flood of Noah service started"
+          else
+            echo "⚠️ Flood of Noah service starting..."
+          fi
+
       - name: Install Tailscale
         run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
-      - name: Establish Tailscale Connection
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tailscale
+
+      - name: Connect Tailscale
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-          $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-              Start-Sleep -Seconds 5
-              $retries++
-          }
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
-              exit 1
-          }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-      - name: Verify RDP Accessibility
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-instance-1 --accept-routes
+          
+          RETRY=0
+          while [ $RETRY -lt 30 ]; do
+            TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
+            if [ -n "$TAILSCALE_IP" ]; then
+              echo "TAILSCALE_IP_1=$TAILSCALE_IP" >> $GITHUB_ENV
+              echo "✅ Instance 1 IP: $TAILSCALE_IP"
+              break
+            fi
+            sleep 2
+            RETRY=$((RETRY+1))
+          done
+
+      - name: Display Info
         run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) {
-              Write-Error "TCP connection to RDP port 3389 failed"
-              exit 1
-          }
-          Write-Host "TCP connectivity successful!"
-      - name: Maintain Connection
+          echo ""
+          echo "╔════════════════════════════════════════════════╗"
+          echo "║         RDP INSTANCE #1                        ║"
+          echo "╠════════════════════════════════════════════════╣"
+          echo "║ 🌐 Network:"
+          echo "║   IP       : $TAILSCALE_IP_1"
+          echo "║"
+          echo "║ 🔐 RDP Access:"
+          echo "║   Address  : $TAILSCALE_IP_1:3389"
+          echo "║   Username : $RDP_USER_1"
+          echo "║   Password : $RDP_PASS_1"
+          echo "║"
+          echo "║ 🌊 Flood of Noah:"
+          echo "║   Status   : RUNNING"
+          echo "║   Web      : http://$TAILSCALE_IP_1:3000"
+          echo "║   Flood    : http://$TAILSCALE_IP_1:3000/flood?count=100"
+          echo "╚════════════════════════════════════════════════╝"
+          echo ""
+
+      - name: Keep Alive
         run: |
-          Write-Host "`n=== RDP ACCESS ==="
-          Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: RDP"
-          Write-Host "Password: $(echo $env:RDP_CREDS)"
-          Write-Host "==================`n"
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
-              Start-Sleep -Seconds 300
-          }
+          START=$(date +%s)
+          DURATION=$((  ${{ github.event.inputs.session_duration }} * 60 ))
+          END=$((START + DURATION))
+          
+          echo "🟢 Instance 1 will run for ${{ github.event.inputs.session_duration }} minutes"
+          
+          COUNTER=0
+          while [ $(date +%s) -lt $END ]; do
+            COUNTER=$((COUNTER + 1))
+            ELAPSED=$((($(date +%s) - START) / 60))
+            REMAIN=$(((END - $(date +%s)) / 60))
+            
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🟢 Instance 1 | $(date '+%H:%M:%S') | ⏱️ ${ELAPSED}m / ${REMAIN}m"
+            
+            # Health check every 5 minutes
+            if [ $((COUNTER % 5)) -eq 0 ]; then
+              if sudo systemctl is-active --quiet xrdp; then
+                echo "   ✅ XRDP: Running"
+              else
+                echo "   ❌ XRDP: Restarting..."
+                sudo systemctl restart xrdp
+              fi
+              
+              if sudo systemctl is-active --quiet flood-noah-1; then
+                echo "   ✅ Flood: Running"
+              else
+                echo "   ⚠️ Flood: Restarting..."
+                sudo systemctl restart flood-noah-1
+              fi
+            fi
+            
+            sleep 60
+          done
+          
+          echo "⏰ Session completed for Instance 1"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo systemctl stop flood-noah-1 || true
+          sudo tailscale logout || true
+
+  ubuntu-rdp-2:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
+    if: ${{ fromJSON(github.event.inputs.instance_count) >= 2 }}
+    
+    steps:
+      - name: Setup RDP Instance 2
+        run: |
+          echo "================================"
+          echo "    RDP INSTANCE #2"
+          echo "================================"
+
+      - name: Install XFCE Desktop
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            xfce4 xfce4-goodies dbus-x11 xorg xrdp firefox nano htop net-tools curl wget git
+
+      - name: Configure XRDP
+        run: |
+          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'EOF'
+          #!/bin/sh
+          if [ -r /etc/default/locale ]; then
+            . /etc/default/locale
+            export LANG LANGUAGE
+          fi
+          startxfce4
+          EOF
+          
+          sudo chmod +x /etc/xrdp/startwm.sh
+          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+          sudo ufw allow 3389/tcp 2>/dev/null || true
+
+      - name: Create User
+        run: |
+          sudo useradd -m -s /bin/bash rdp2
+          echo "rdp2:Pass1234!" | sudo chpasswd
+          sudo usermod -aG sudo rdp2
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+      - name: Install Flood of Noah
+        run: |
+          sudo mkdir -p /home/runner/.config/puppeteer
+          sudo chown -R $(whoami):$(whoami) /home/runner
+          sudo chmod -R 755 /home/runner
+          
+          cd ~
+          rm -rf flood_of-noah
+          git clone https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
+          rm -rf node_modules package-lock.json
+          npm install express axios socks puppeteer --save
+
+      - name: Create Flood Service
+        run: |
+          sudo tee /etc/systemd/system/flood-noah-2.service > /dev/null << 'EOF'
+          [Unit]
+          Description=Flood of Noah - Instance 2
+          After=network-online.target
+          
+          [Service]
+          Type=simple
+          User=runner
+          WorkingDirectory=/home/runner/flood_of-noah
+          ExecStart=/usr/bin/node index.js
+          Restart=always
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          sudo systemctl daemon-reload
+          sudo systemctl enable flood-noah-2.service
+          sudo systemctl start flood-noah-2.service
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tailscale
+
+      - name: Connect Tailscale
+        run: |
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-instance-2 --accept-routes
+          
+          RETRY=0
+          while [ $RETRY -lt 30 ]; do
+            TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
+            if [ -n "$TAILSCALE_IP" ]; then
+              echo "✅ Instance 2 IP: $TAILSCALE_IP"
+              break
+            fi
+            sleep 2
+            RETRY=$((RETRY+1))
+          done
+
+      - name: Display Info
+        run: |
+          TAILSCALE_IP=$(tailscale ip -4)
+          echo ""
+          echo "╔════════════════════════════════════════════════╗"
+          echo "║         RDP INSTANCE #2                        ║"
+          echo "╠════════════════════════════════════════════════╣"
+          echo "║ IP       : $TAILSCALE_IP"
+          echo "║ Username : rdp2"
+          echo "║ Password : Pass1234!"
+          echo "║ Flood    : http://$TAILSCALE_IP:3000"
+          echo "╚════════════════════════════════════════════════╝"
+
+      - name: Keep Alive
+        run: |
+          START=$(date +%s)
+          DURATION=$((${{ github.event.inputs.session_duration }} * 60))
+          END=$((START + DURATION))
+          
+          COUNTER=0
+          while [ $(date +%s) -lt $END ]; do
+            COUNTER=$((COUNTER + 1))
+            ELAPSED=$((($(date +%s) - START) / 60))
+            REMAIN=$(((END - $(date +%s)) / 60))
+            echo "🟢 Instance 2 | ${ELAPSED}m / ${REMAIN}m"
+            
+            if [ $((COUNTER % 5)) -eq 0 ]; then
+              sudo systemctl is-active --quiet xrdp || sudo systemctl restart xrdp
+              sudo systemctl is-active --quiet flood-noah-2 || sudo systemctl restart flood-noah-2
+            fi
+            
+            sleep 60
+          done
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo systemctl stop flood-noah-2 || true
+          sudo tailscale logout || true
+
+  ubuntu-rdp-3:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
+    if: ${{ fromJSON(github.event.inputs.instance_count) >= 3 }}
+    
+    steps:
+      - name: Setup RDP Instance 3
+        run: |
+          echo "================================"
+          echo "    RDP INSTANCE #3"
+          echo "================================"
+
+      - name: Install XFCE Desktop
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            xfce4 xfce4-goodies dbus-x11 xorg xrdp firefox nano htop net-tools curl wget git
+
+      - name: Configure XRDP
+        run: |
+          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'EOF'
+          #!/bin/sh
+          if [ -r /etc/default/locale ]; then
+            . /etc/default/locale
+            export LANG LANGUAGE
+          fi
+          startxfce4
+          EOF
+          
+          sudo chmod +x /etc/xrdp/startwm.sh
+          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+          sudo ufw allow 3389/tcp 2>/dev/null || true
+
+      - name: Create User
+        run: |
+          sudo useradd -m -s /bin/bash rdp3
+          echo "rdp3:Pass1234!" | sudo chpasswd
+          sudo usermod -aG sudo rdp3
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+      - name: Install Flood of Noah
+        run: |
+          sudo mkdir -p /home/runner/.config/puppeteer
+          sudo chown -R $(whoami):$(whoami) /home/runner
+          sudo chmod -R 755 /home/runner
+          
+          cd ~
+          rm -rf flood_of-noah
+          git clone https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
+          rm -rf node_modules package-lock.json
+          npm install express axios socks puppeteer --save
+
+      - name: Create Flood Service
+        run: |
+          sudo tee /etc/systemd/system/flood-noah-3.service > /dev/null << 'EOF'
+          [Unit]
+          Description=Flood of Noah - Instance 3
+          After=network-online.target
+          
+          [Service]
+          Type=simple
+          User=runner
+          WorkingDirectory=/home/runner/flood_of-noah
+          ExecStart=/usr/bin/node index.js
+          Restart=always
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          sudo systemctl daemon-reload
+          sudo systemctl enable flood-noah-3.service
+          sudo systemctl start flood-noah-3.service
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tailscale
+
+      - name: Connect Tailscale
+        run: |
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-instance-3 --accept-routes
+          
+          RETRY=0
+          while [ $RETRY -lt 30 ]; do
+            TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
+            if [ -n "$TAILSCALE_IP" ]; then
+              echo "✅ Instance 3 IP: $TAILSCALE_IP"
+              break
+            fi
+            sleep 2
+            RETRY=$((RETRY+1))
+          done
+
+      - name: Display Info
+        run: |
+          TAILSCALE_IP=$(tailscale ip -4)
+          echo ""
+          echo "╔════════════════════════════════════════════════╗"
+          echo "║         RDP INSTANCE #3                        ║"
+          echo "╠════════════════════════════════════════════════╣"
+          echo "║ IP       : $TAILSCALE_IP"
+          echo "║ Username : rdp3"
+          echo "║ Password : Pass1234!"
+          echo "║ Flood    : http://$TAILSCALE_IP:3000"
+          echo "╚════════════════════════════════════════════════╝"
+
+      - name: Keep Alive
+        run: |
+          START=$(date +%s)
+          DURATION=$((${{ github.event.inputs.session_duration }} * 60))
+          END=$((START + DURATION))
+          
+          COUNTER=0
+          while [ $(date +%s) -lt $END ]; do
+            COUNTER=$((COUNTER + 1))
+            ELAPSED=$((($(date +%s) - START) / 60))
+            REMAIN=$(((END - $(date +%s)) / 60))
+            echo "🟢 Instance 3 | ${ELAPSED}m / ${REMAIN}m"
+            
+            if [ $((COUNTER % 5)) -eq 0 ]; then
+              sudo systemctl is-active --quiet xrdp || sudo systemctl restart xrdp
+              sudo systemctl is-active --quiet flood-noah-3 || sudo systemctl restart flood-noah-3
+            fi
+            
+            sleep 60
+          done
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo systemctl stop flood-noah-3 || true
+          sudo tailscale logout || true
