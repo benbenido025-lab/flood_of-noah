@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       instance_count:
-        description: 'Number of RDP instances (1-10)'
+        description: 'Number of instances (1-3)'
         required: true
         default: '3'
         type: choice
@@ -11,13 +11,6 @@ on:
           - '1'
           - '2'
           - '3'
-          - '4'
-          - '5'
-          - '6'
-          - '7'
-          - '8'
-          - '9'
-          - '10'
       session_duration:
         description: 'Session duration (minutes)'
         required: false
@@ -29,46 +22,17 @@ jobs:
     timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
     
     steps:
-      - name: Setup RDP Instance 1
+      - name: Setup Instance 1
         run: |
           echo "================================"
-          echo "    RDP INSTANCE #1"
-          echo "================================"
-          echo "OS: $(lsb_release -d | cut -f2)"
-          echo "CPU: $(nproc) cores"
-          echo "RAM: $(free -h | awk '/^Mem:/ {print $2}')"
+          echo "    INSTANCE #1 STARTING"
           echo "================================"
 
-      - name: Install XFCE Desktop
+      - name: Install Dependencies
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            xfce4 xfce4-goodies dbus-x11 xorg xrdp firefox nano htop net-tools curl wget git
-
-      - name: Configure XRDP
-        run: |
-          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'EOF'
-          #!/bin/sh
-          if [ -r /etc/default/locale ]; then
-            . /etc/default/locale
-            export LANG LANGUAGE
-          fi
-          startxfce4
-          EOF
-          
-          sudo chmod +x /etc/xrdp/startwm.sh
-          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
-          sudo systemctl enable xrdp
-          sudo systemctl start xrdp
-          sudo ufw allow 3389/tcp 2>/dev/null || true
-
-      - name: Create User
-        run: |
-          sudo useradd -m -s /bin/bash rdp1
-          echo "rdp1:Pass1234!" | sudo chpasswd
-          sudo usermod -aG sudo rdp1
-          echo "RDP_USER_1=rdp1" >> $GITHUB_ENV
-          echo "RDP_PASS_1=Pass1234!" >> $GITHUB_ENV
+            curl wget git nano htop net-tools
 
       - name: Install Node.js
         run: |
@@ -79,143 +43,65 @@ jobs:
       - name: Install Flood of Noah
         run: |
           echo "🌊 Installing Flood of Noah..."
-          
-          # Setup puppeteer directory
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
-          
-          # Clone and install
           cd ~
           rm -rf flood_of-noah
           git clone https://github.com/benbenido025-lab/flood_of-noah
           cd flood_of-noah
           rm -rf node_modules package-lock.json
           npm install express axios socks puppeteer --save
-          
-          echo "✅ Flood of Noah installed at ~/flood_of-noah"
+          echo "✅ Flood of Noah installed"
 
-      - name: Create Flood Service
+      - name: Start Flood Service
         run: |
-          sudo tee /etc/systemd/system/flood-noah-1.service > /dev/null << 'EOF'
-          [Unit]
-          Description=Flood of Noah - Instance 1
-          After=network-online.target
-          Wants=network-online.target
-          
-          [Service]
-          Type=simple
-          User=runner
-          WorkingDirectory=/home/runner/flood_of-noah
-          ExecStart=/usr/bin/node index.js
-          Restart=always
-          RestartSec=10
-          Environment=NODE_ENV=production
-          Environment=PORT=3000
-          
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-          
-          sudo systemctl daemon-reload
-          sudo systemctl enable flood-noah-1.service
-          sudo systemctl start flood-noah-1.service
-          
-          sleep 3
-          if sudo systemctl is-active --quiet flood-noah-1.service; then
-            echo "✅ Flood of Noah service started"
-          else
-            echo "⚠️ Flood of Noah service starting..."
-          fi
-
-      - name: Install Tailscale
-        run: |
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq tailscale
-
-      - name: Connect Tailscale
-        run: |
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-instance-1 --accept-routes
-          
-          RETRY=0
-          while [ $RETRY -lt 30 ]; do
-            TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
-            if [ -n "$TAILSCALE_IP" ]; then
-              echo "TAILSCALE_IP_1=$TAILSCALE_IP" >> $GITHUB_ENV
-              echo "✅ Instance 1 IP: $TAILSCALE_IP"
-              break
-            fi
-            sleep 2
-            RETRY=$((RETRY+1))
-          done
+          cd ~/flood_of-noah
+          nohup node index.js > /tmp/flood-1.log 2>&1 &
+          sleep 5
+          echo "✅ Flood of Noah running on Instance 1"
+          echo "📍 Service available at: http://localhost:3000"
 
       - name: Display Info
         run: |
+          PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
           echo ""
           echo "╔════════════════════════════════════════════════╗"
-          echo "║         RDP INSTANCE #1                        ║"
+          echo "║         INSTANCE #1 READY                      ║"
           echo "╠════════════════════════════════════════════════╣"
-          echo "║ 🌐 Network:"
-          echo "║   IP       : $TAILSCALE_IP_1"
-          echo "║"
-          echo "║ 🔐 RDP Access:"
-          echo "║   Address  : $TAILSCALE_IP_1:3389"
-          echo "║   Username : $RDP_USER_1"
-          echo "║   Password : $RDP_PASS_1"
-          echo "║"
-          echo "║ 🌊 Flood of Noah:"
-          echo "║   Status   : RUNNING"
-          echo "║   Web      : http://$TAILSCALE_IP_1:3000"
-          echo "║   Flood    : http://$TAILSCALE_IP_1:3000/flood?count=100"
+          echo "║ Public IP : $PUBLIC_IP"
+          echo "║ Status    : ACTIVE"
+          echo "║ Flood API : http://localhost:3000"
           echo "╚════════════════════════════════════════════════╝"
-          echo ""
 
       - name: Keep Alive
         run: |
           START=$(date +%s)
-          DURATION=$((  ${{ github.event.inputs.session_duration }} * 60 ))
+          DURATION=$((${{ github.event.inputs.session_duration }} * 60))
           END=$((START + DURATION))
-          
-          echo "🟢 Instance 1 will run for ${{ github.event.inputs.session_duration }} minutes"
-          
+          echo "🟢 Instance 1 running for ${{ github.event.inputs.session_duration }} minutes"
           COUNTER=0
           while [ $(date +%s) -lt $END ]; do
             COUNTER=$((COUNTER + 1))
             ELAPSED=$((($(date +%s) - START) / 60))
             REMAIN=$(((END - $(date +%s)) / 60))
-            
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🟢 Instance 1 | $(date '+%H:%M:%S') | ⏱️ ${ELAPSED}m / ${REMAIN}m"
-            
-            # Health check every 5 minutes
-            if [ $((COUNTER % 5)) -eq 0 ]; then
-              if sudo systemctl is-active --quiet xrdp; then
-                echo "   ✅ XRDP: Running"
+            echo "🟢 Instance 1 | ${ELAPSED}m / ${REMAIN}m remaining"
+            if [ $((COUNTER % 10)) -eq 0 ]; then
+              if pgrep -f "node index.js" > /dev/null; then
+                echo "   ✅ Flood service: Running"
               else
-                echo "   ❌ XRDP: Restarting..."
-                sudo systemctl restart xrdp
-              fi
-              
-              if sudo systemctl is-active --quiet flood-noah-1; then
-                echo "   ✅ Flood: Running"
-              else
-                echo "   ⚠️ Flood: Restarting..."
-                sudo systemctl restart flood-noah-1
+                echo "   ⚠️ Restarting Flood service..."
+                cd ~/flood_of-noah && nohup node index.js > /tmp/flood-1.log 2>&1 &
               fi
             fi
-            
             sleep 60
           done
-          
-          echo "⏰ Session completed for Instance 1"
 
       - name: Cleanup
         if: always()
         run: |
-          sudo systemctl stop flood-noah-1 || true
-          sudo tailscale logout || true
+          pkill -f "node index.js" || true
+          echo "🧹 Instance 1 cleaned up"
 
   ubuntu-rdp-2:
     runs-on: ubuntu-latest
@@ -223,114 +109,54 @@ jobs:
     if: ${{ fromJSON(github.event.inputs.instance_count) >= 2 }}
     
     steps:
-      - name: Setup RDP Instance 2
+      - name: Setup Instance 2
         run: |
           echo "================================"
-          echo "    RDP INSTANCE #2"
+          echo "    INSTANCE #2 STARTING"
           echo "================================"
 
-      - name: Install XFCE Desktop
+      - name: Install Dependencies
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            xfce4 xfce4-goodies dbus-x11 xorg xrdp firefox nano htop net-tools curl wget git
-
-      - name: Configure XRDP
-        run: |
-          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'EOF'
-          #!/bin/sh
-          if [ -r /etc/default/locale ]; then
-            . /etc/default/locale
-            export LANG LANGUAGE
-          fi
-          startxfce4
-          EOF
-          
-          sudo chmod +x /etc/xrdp/startwm.sh
-          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
-          sudo systemctl enable xrdp
-          sudo systemctl start xrdp
-          sudo ufw allow 3389/tcp 2>/dev/null || true
-
-      - name: Create User
-        run: |
-          sudo useradd -m -s /bin/bash rdp2
-          echo "rdp2:Pass1234!" | sudo chpasswd
-          sudo usermod -aG sudo rdp2
+            curl wget git nano htop net-tools
 
       - name: Install Node.js
         run: |
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
+          echo "✅ Node.js $(node --version) installed"
 
       - name: Install Flood of Noah
         run: |
+          echo "🌊 Installing Flood of Noah..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
-          
           cd ~
           rm -rf flood_of-noah
           git clone https://github.com/benbenido025-lab/flood_of-noah
           cd flood_of-noah
           rm -rf node_modules package-lock.json
           npm install express axios socks puppeteer --save
+          echo "✅ Flood of Noah installed"
 
-      - name: Create Flood Service
+      - name: Start Flood Service
         run: |
-          sudo tee /etc/systemd/system/flood-noah-2.service > /dev/null << 'EOF'
-          [Unit]
-          Description=Flood of Noah - Instance 2
-          After=network-online.target
-          
-          [Service]
-          Type=simple
-          User=runner
-          WorkingDirectory=/home/runner/flood_of-noah
-          ExecStart=/usr/bin/node index.js
-          Restart=always
-          
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-          
-          sudo systemctl daemon-reload
-          sudo systemctl enable flood-noah-2.service
-          sudo systemctl start flood-noah-2.service
-
-      - name: Install Tailscale
-        run: |
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq tailscale
-
-      - name: Connect Tailscale
-        run: |
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-instance-2 --accept-routes
-          
-          RETRY=0
-          while [ $RETRY -lt 30 ]; do
-            TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
-            if [ -n "$TAILSCALE_IP" ]; then
-              echo "✅ Instance 2 IP: $TAILSCALE_IP"
-              break
-            fi
-            sleep 2
-            RETRY=$((RETRY+1))
-          done
+          cd ~/flood_of-noah
+          nohup node index.js > /tmp/flood-2.log 2>&1 &
+          sleep 5
+          echo "✅ Flood of Noah running on Instance 2"
 
       - name: Display Info
         run: |
-          TAILSCALE_IP=$(tailscale ip -4)
-          echo ""
+          PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
           echo "╔════════════════════════════════════════════════╗"
-          echo "║         RDP INSTANCE #2                        ║"
+          echo "║         INSTANCE #2 READY                      ║"
           echo "╠════════════════════════════════════════════════╣"
-          echo "║ IP       : $TAILSCALE_IP"
-          echo "║ Username : rdp2"
-          echo "║ Password : Pass1234!"
-          echo "║ Flood    : http://$TAILSCALE_IP:3000"
+          echo "║ Public IP : $PUBLIC_IP"
+          echo "║ Status    : ACTIVE"
+          echo "║ Flood API : http://localhost:3000"
           echo "╚════════════════════════════════════════════════╝"
 
       - name: Keep Alive
@@ -338,27 +164,29 @@ jobs:
           START=$(date +%s)
           DURATION=$((${{ github.event.inputs.session_duration }} * 60))
           END=$((START + DURATION))
-          
+          echo "🟢 Instance 2 running for ${{ github.event.inputs.session_duration }} minutes"
           COUNTER=0
           while [ $(date +%s) -lt $END ]; do
             COUNTER=$((COUNTER + 1))
             ELAPSED=$((($(date +%s) - START) / 60))
             REMAIN=$(((END - $(date +%s)) / 60))
-            echo "🟢 Instance 2 | ${ELAPSED}m / ${REMAIN}m"
-            
-            if [ $((COUNTER % 5)) -eq 0 ]; then
-              sudo systemctl is-active --quiet xrdp || sudo systemctl restart xrdp
-              sudo systemctl is-active --quiet flood-noah-2 || sudo systemctl restart flood-noah-2
+            echo "🟢 Instance 2 | ${ELAPSED}m / ${REMAIN}m remaining"
+            if [ $((COUNTER % 10)) -eq 0 ]; then
+              if pgrep -f "node index.js" > /dev/null; then
+                echo "   ✅ Flood service: Running"
+              else
+                echo "   ⚠️ Restarting Flood service..."
+                cd ~/flood_of-noah && nohup node index.js > /tmp/flood-2.log 2>&1 &
+              fi
             fi
-            
             sleep 60
           done
 
       - name: Cleanup
         if: always()
         run: |
-          sudo systemctl stop flood-noah-2 || true
-          sudo tailscale logout || true
+          pkill -f "node index.js" || true
+          echo "🧹 Instance 2 cleaned up"
 
   ubuntu-rdp-3:
     runs-on: ubuntu-latest
@@ -366,114 +194,54 @@ jobs:
     if: ${{ fromJSON(github.event.inputs.instance_count) >= 3 }}
     
     steps:
-      - name: Setup RDP Instance 3
+      - name: Setup Instance 3
         run: |
           echo "================================"
-          echo "    RDP INSTANCE #3"
+          echo "    INSTANCE #3 STARTING"
           echo "================================"
 
-      - name: Install XFCE Desktop
+      - name: Install Dependencies
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            xfce4 xfce4-goodies dbus-x11 xorg xrdp firefox nano htop net-tools curl wget git
-
-      - name: Configure XRDP
-        run: |
-          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'EOF'
-          #!/bin/sh
-          if [ -r /etc/default/locale ]; then
-            . /etc/default/locale
-            export LANG LANGUAGE
-          fi
-          startxfce4
-          EOF
-          
-          sudo chmod +x /etc/xrdp/startwm.sh
-          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
-          sudo systemctl enable xrdp
-          sudo systemctl start xrdp
-          sudo ufw allow 3389/tcp 2>/dev/null || true
-
-      - name: Create User
-        run: |
-          sudo useradd -m -s /bin/bash rdp3
-          echo "rdp3:Pass1234!" | sudo chpasswd
-          sudo usermod -aG sudo rdp3
+            curl wget git nano htop net-tools
 
       - name: Install Node.js
         run: |
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
+          echo "✅ Node.js $(node --version) installed"
 
       - name: Install Flood of Noah
         run: |
+          echo "🌊 Installing Flood of Noah..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
-          
           cd ~
           rm -rf flood_of-noah
           git clone https://github.com/benbenido025-lab/flood_of-noah
           cd flood_of-noah
           rm -rf node_modules package-lock.json
           npm install express axios socks puppeteer --save
+          echo "✅ Flood of Noah installed"
 
-      - name: Create Flood Service
+      - name: Start Flood Service
         run: |
-          sudo tee /etc/systemd/system/flood-noah-3.service > /dev/null << 'EOF'
-          [Unit]
-          Description=Flood of Noah - Instance 3
-          After=network-online.target
-          
-          [Service]
-          Type=simple
-          User=runner
-          WorkingDirectory=/home/runner/flood_of-noah
-          ExecStart=/usr/bin/node index.js
-          Restart=always
-          
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-          
-          sudo systemctl daemon-reload
-          sudo systemctl enable flood-noah-3.service
-          sudo systemctl start flood-noah-3.service
-
-      - name: Install Tailscale
-        run: |
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq tailscale
-
-      - name: Connect Tailscale
-        run: |
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=rdp-instance-3 --accept-routes
-          
-          RETRY=0
-          while [ $RETRY -lt 30 ]; do
-            TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
-            if [ -n "$TAILSCALE_IP" ]; then
-              echo "✅ Instance 3 IP: $TAILSCALE_IP"
-              break
-            fi
-            sleep 2
-            RETRY=$((RETRY+1))
-          done
+          cd ~/flood_of-noah
+          nohup node index.js > /tmp/flood-3.log 2>&1 &
+          sleep 5
+          echo "✅ Flood of Noah running on Instance 3"
 
       - name: Display Info
         run: |
-          TAILSCALE_IP=$(tailscale ip -4)
-          echo ""
+          PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
           echo "╔════════════════════════════════════════════════╗"
-          echo "║         RDP INSTANCE #3                        ║"
+          echo "║         INSTANCE #3 READY                      ║"
           echo "╠════════════════════════════════════════════════╣"
-          echo "║ IP       : $TAILSCALE_IP"
-          echo "║ Username : rdp3"
-          echo "║ Password : Pass1234!"
-          echo "║ Flood    : http://$TAILSCALE_IP:3000"
+          echo "║ Public IP : $PUBLIC_IP"
+          echo "║ Status    : ACTIVE"
+          echo "║ Flood API : http://localhost:3000"
           echo "╚════════════════════════════════════════════════╝"
 
       - name: Keep Alive
@@ -481,24 +249,26 @@ jobs:
           START=$(date +%s)
           DURATION=$((${{ github.event.inputs.session_duration }} * 60))
           END=$((START + DURATION))
-          
+          echo "🟢 Instance 3 running for ${{ github.event.inputs.session_duration }} minutes"
           COUNTER=0
           while [ $(date +%s) -lt $END ]; do
             COUNTER=$((COUNTER + 1))
             ELAPSED=$((($(date +%s) - START) / 60))
             REMAIN=$(((END - $(date +%s)) / 60))
-            echo "🟢 Instance 3 | ${ELAPSED}m / ${REMAIN}m"
-            
-            if [ $((COUNTER % 5)) -eq 0 ]; then
-              sudo systemctl is-active --quiet xrdp || sudo systemctl restart xrdp
-              sudo systemctl is-active --quiet flood-noah-3 || sudo systemctl restart flood-noah-3
+            echo "🟢 Instance 3 | ${ELAPSED}m / ${REMAIN}m remaining"
+            if [ $((COUNTER % 10)) -eq 0 ]; then
+              if pgrep -f "node index.js" > /dev/null; then
+                echo "   ✅ Flood service: Running"
+              else
+                echo "   ⚠️ Restarting Flood service..."
+                cd ~/flood_of-noah && nohup node index.js > /tmp/flood-3.log 2>&1 &
+              fi
             fi
-            
             sleep 60
           done
 
       - name: Cleanup
         if: always()
         run: |
-          sudo systemctl stop flood-noah-3 || true
-          sudo tailscale logout || true
+          pkill -f "node index.js" || true
+          echo "🧹 Instance 3 cleaned up"
