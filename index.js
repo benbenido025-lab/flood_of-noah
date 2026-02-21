@@ -80,7 +80,7 @@ async function startBot() {
   const port = process.env.PORT || process.env.SERVER_PORT || 5552;
 
   // Master server URL - your Render deployment
-  const MASTER_SERVER = process.env.MASTER_SERVER || 'http://localhost:5553';
+  const MASTER_SERVER = process.env.MASTER_SERVER || 'https://server-ku8h.onrender.com';
   let myBotUrl = '';
   let registrationAttempts = 0;
   const MAX_REGISTRATION_ATTEMPTS = 5;
@@ -636,3 +636,4 @@ startBot().catch(error => {
   console.error('Failed to start bot:', error);
   process.exit(1);
 });
+
