@@ -13,7 +13,7 @@
     "socks-proxy-agent": "^8.0.2",
     "colors": "^1.4.0",
     "puppeteer": "^21.0.0",
-    "@ghostery/adblocker-puppeteer": "^1.0.0",
+    "@ghostery/adblocker-puppeteer": "^2.13.2",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-adblocker": "^2.13.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
