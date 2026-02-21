@@ -25,7 +25,7 @@
     "https-proxy-agent": "^7.0.2",
     "socks-proxy-agent": "^8.0.2",
     "colors": "^1.4.0",
-    "puppeteer": "^21.11.0",
+    "puppeteer": "^24.15.0",
     "@ghostery/adblocker-puppeteer": "^2.13.2",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-adblocker": "^2.13.6",
@@ -33,8 +33,5 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
-  },
-  "keywords": [],
-  "author": "",
-  "description": ""
+  }
 }
