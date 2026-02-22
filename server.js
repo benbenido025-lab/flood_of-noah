@@ -173,7 +173,7 @@ const methodFiles = {
   'CF-BYPASS': 'methods/cf-bypass.js',
   'MODERN-FLOOD': 'methods/modern-flood.js',
   'HTTP-SICARIO': 'methods/REX-COSTUM.js',
-  'RAW-HTTP': 'methods/h2-nust',
+  'RAW-HTTP': 'methods/h2-nust.js',
   'R9': 'methods/high-dstat.js',
   'PRIV-TOR': 'methods/w-flood1.js',
   'HOLD-PANEL': 'methods/http-panel.js',
@@ -2069,3 +2069,4 @@ app.listen(port, () => {
   console.log('   - proxy.txt - Add your proxies (one per line)');
   console.log('📊 Live Stats: Tracking RPS, RPM, and attack metrics\n');
 });
+
