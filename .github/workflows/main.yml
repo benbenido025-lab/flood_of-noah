@@ -12,82 +12,125 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Setup Ubuntu
+    - name: Setup Ubuntu (No Docker)
       run: |
         echo "🚀 Starting Ubuntu VPS..."
+        
+        # Update without Docker (to avoid conflicts)
         sudo apt-get update
-        sudo apt-get install -y curl wget git vim nano htop tmux python3 python3-pip docker.io openssh-server
+        sudo apt-get install -y \
+          curl \
+          wget \
+          git \
+          vim \
+          nano \
+          htop \
+          tmux \
+          python3 \
+          python3-pip \
+          openssh-server \
+          net-tools \
+          iputils-ping
         
+        echo "✅ Base system ready"
+    
     - name: Install Tailscale
-      env:
-        TS_KEY: ${{ secrets.TAILSCALE_KEY }}
       run: |
-        # Use your key directly (or via secret)
-        TS_AUTH_KEY="tskey-auth-kiczyMxmPm11CNTRL-wWZxz1Ng2hJyqrmgHAq7iJomN6hz2je9F"
-        
         # Install Tailscale
         curl -fsSL https://tailscale.com/install.sh | sh
         
-        # Connect to your tailnet
-        sudo tailscale up --authkey $TS_AUTH_KEY --hostname="github-vps"
+        # Connect using your key
+        sudo tailscale up --authkey tskey-auth-kiczyMxmPm11CNTRL-wWZxz1Ng2hJyqrmgHAq7iJomN6hz2je9F --hostname="github-vps"
+        
+        # Wait for connection
+        sleep 5
         
         # Get IP
-        sleep 5
         IP=$(tailscale ip -4)
+        echo "TAILSCALE_IP=$IP" >> $GITHUB_ENV
         
-        echo "✅ Connected to Tailscale!"
-        echo "IP: $IP"
-        
-        # Save IP to file
-        echo $IP > tailscale_ip.txt
+        echo "✅ Connected to Tailscale! IP: $IP"
     
     - name: Setup SSH
       run: |
         # Set password for runner user
         echo "runner:ubuntuvps123" | sudo chpasswd
         
-        # Configure SSH
-        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        # Configure SSH for password auth
+        sudo sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/^#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+        
+        # Restart SSH
         sudo systemctl restart ssh
         
+        echo "✅ SSH configured"
+    
+    - name: Create Workspace
+      run: |
+        # Create working directory
+        mkdir -p /home/runner/workspace
+        cd /home/runner/workspace
+        
+        # Create welcome message
+        cat > welcome.txt << 'EOF'
+╔════════════════════════════════════╗
+║     UBUNTU VPS ON GITHUB ACTIONS   ║
+║        CONNECTED VIA TAILSCALE      ║
+╚════════════════════════════════════╝
+
+Commands:
+  📊 System: htop, df -h, free -h
+  📁 Files: cd ~/workspace
+  🔧 Tools: python3, git, vim, nano
+
+Your Tailscale IP is shown above!
+EOF
+        
+        echo "✅ Workspace ready at /home/runner/workspace"
+    
     - name: Display Connection Info
       run: |
-        IP=$(cat tailscale_ip.txt)
-        
         echo "══════════════════════════════════════════"
-        echo "✅ VPS READY! Connect with:"
+        echo "✅ VPS READY! CONNECT VIA TAILSCALE"
         echo "══════════════════════════════════════════"
         echo ""
-        echo "🔑 SSH Command:"
-        echo "  ssh runner@$IP"
+        echo "🔑 SSH COMMAND:"
+        echo "  ssh runner@${{ env.TAILSCALE_IP }}"
         echo ""
-        echo "🔐 Password: ubuntuvps123"
+        echo "🔐 PASSWORD: ubuntuvps123"
         echo ""
-        echo "🌐 Tailscale IP: $IP"
+        echo "🌐 TAILSCALE IP: ${{ env.TAILSCALE_IP }}"
         echo ""
-        echo "💻 From your machine (must be on Tailscale):"
-        echo "  ssh runner@$IP"
+        echo "📝 CONNECTION STEPS:"
+        echo "  1. Make sure Tailscale is running on your local machine"
+        echo "  2. Run: ssh runner@${{ env.TAILSCALE_IP }}"
+        echo "  3. Enter password: ubuntuvps123"
+        echo "  4. Change password immediately: passwd"
         echo ""
-        echo "📝 To change password after connecting:"
-        echo "  passwd"
-        echo ""
+        echo "⏰ This VPS will run for 6 hours"
         echo "══════════════════════════════════════════"
         
         # Save to GitHub Step Summary
         echo "## 🔑 SSH Connection Info" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-        echo "ssh runner@$IP" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        echo "Password: \`ubuntuvps123\`" >> $GITHUB_STEP_SUMMARY
+        echo "```bash" >> $GITHUB_STEP_SUMMARY
+        echo "ssh runner@${{ env.TAILSCALE_IP }}" >> $GITHUB_STEP_SUMMARY
+        echo "```" >> $GITHUB_STEP_SUMMARY
+        echo "**Password:** \`ubuntuvps123\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Tailscale IP:** \`${{ env.TAILSCALE_IP }}\`" >> $GITHUB_STEP_SUMMARY
     
     - name: Keep Alive
       run: |
         echo "🔄 VPS is running. Will stay alive for 6 hours..."
-        echo "Press Ctrl+C in Actions tab to stop"
+        echo "To stop: Go to Actions tab and click 'Cancel workflow'"
+        echo ""
         
-        # Simple keep-alive
+        # Simple keep-alive loop
+        counter=0
         while true; do
-          echo "[$(date)] Heartbeat - VPS alive"
-          sleep 300
+          counter=$((counter + 1))
+          echo "[$(date)] Heartbeat #$counter - VPS alive on Tailscale: ${{ env.TAILSCALE_IP }}"
+          sleep 300  # 5 minutes
         done
