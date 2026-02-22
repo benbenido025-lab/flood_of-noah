@@ -1,542 +1,233 @@
-name: Flood-of-Noah-God-Mode
+name: 🚀 Ubuntu VPS with Tailscale
+
 on:
-  workflow_dispatch:
-    inputs:
-      instance_count:
-        description: 'Number of instances (1-3)'
-        required: true
-        default: '3'
-        type: choice
-        options:
-          - '1'
-          - '2'
-          - '3'
-      session_duration:
-        description: 'Session duration (minutes)'
-        required: false
-        default: '360'
+  workflow_dispatch:  # Manual trigger only
+  schedule:
+    - cron: '0 */8 * * *'  # Runs every 8 hours to keep it alive
 
 jobs:
-  flood-instance-1:
+  vps:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
+    timeout-minutes: 360  # 6 hours max
     
     steps:
-      - name: Setup Instance 1
-        run: |
-          echo "================================"
-          echo "  FLOOD INSTANCE #1 - GOD MODE"
-          echo "================================"
-
-      - name: God-Tier System Optimization
-        run: |
-          echo "⚡ ACTIVATING GOD MODE PERFORMANCE..."
-          
-          # MAXIMUM SWAP - 16GB for ultimate memory
-          sudo swapoff -a
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 status=progress
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          sudo swapon --show
-          echo "✅ 16GB SWAP ACTIVATED"
-          
-          # NETWORK GOD MODE - Maximum throughput optimization
-          sudo sysctl -w net.core.rmem_max=268435456 2>/dev/null || true
-          sudo sysctl -w net.core.wmem_max=268435456 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 134217728' 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 134217728' 2>/dev/null || true
-          sudo sysctl -w net.core.netdev_max_backlog=10000 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_no_metrics_save=1 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192 2>/dev/null || true
-          sudo sysctl -w net.core.somaxconn=8192 2>/dev/null || true
-          sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535' 2>/dev/null || true
-          echo "✅ NETWORK OPTIMIZED TO MAXIMUM"
-          
-          # CPU GOD MODE
-          echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
-          sudo sysctl -w kernel.sched_migration_cost_ns=5000000 2>/dev/null || true
-          sudo sysctl -w kernel.sched_autogroup_enabled=0 2>/dev/null || true
-          echo "✅ CPU PERFORMANCE MODE ENABLED"
-          
-          # FILE SYSTEM OPTIMIZATION
-          sudo sysctl -w fs.file-max=2097152 2>/dev/null || true
-          sudo sysctl -w fs.nr_open=2097152 2>/dev/null || true
-          ulimit -n 1048576 2>/dev/null || true
-          echo "✅ FILE LIMITS MAXIMIZED"
-          
-          # VM OPTIMIZATION
-          sudo sysctl -w vm.swappiness=10 2>/dev/null || true
-          sudo sysctl -w vm.dirty_ratio=15 2>/dev/null || true
-          sudo sysctl -w vm.dirty_background_ratio=5 2>/dev/null || true
-          sudo sysctl -w vm.vfs_cache_pressure=50 2>/dev/null || true
-          echo "✅ VIRTUAL MEMORY OPTIMIZED"
-          
-          echo ""
-          echo "🔥🔥🔥 GOD MODE ACTIVATED 🔥🔥🔥"
-
-      - name: Install High-Performance Dependencies
-        run: |
-          echo "📦 Installing performance dependencies..."
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl wget git nano htop iftop iotop nethogs \
-            build-essential libssl-dev zlib1g-dev \
-            libbz2-dev libreadline-dev libsqlite3-dev \
-            llvm libncurses5-dev libncursesw5-dev \
-            xz-utils tk-dev libffi-dev liblzma-dev \
-            python3-pip speedtest-cli stress-ng \
-            dstat sysstat net-tools
-          echo "✅ All dependencies installed"
-
-      - name: Install Node.js (Ultra-Fast Configuration)
-        run: |
-          echo "🚀 Installing Node.js with ultra-fast settings..."
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-          
-          # GOD-TIER NPM CONFIGURATION
-          npm config set fetch-retries 10
-          npm config set fetch-retry-mintimeout 10000
-          npm config set fetch-retry-maxtimeout 180000
-          npm config set maxsockets 100
-          npm config set prefer-offline false
-          npm config set prefer-online true
-          npm config set progress false
-          
-          echo "✅ Node.js $(node --version) - GOD MODE READY"
-          echo "✅ npm $(npm --version) - ULTRA-FAST CONFIG"
-
-      - name: Network Performance Test
-        run: |
-          echo "📊 Testing network performance..."
-          speedtest-cli --simple || echo "⚡ Speed test skipped"
-          echo "🌐 Testing GitHub connectivity..."
-          time git ls-remote https://github.com/benbenido025-lab/flood_of-noah.git HEAD
-
-      - name: Install Flood of Noah (Performance Build)
-        run: |
-          echo "🌊 Installing Flood of Noah with GOD-TIER optimizations..."
-          
-          # Prepare Puppeteer directory
-          sudo mkdir -p /home/runner/.config/puppeteer
-          sudo chown -R $(whoami):$(whoami) /home/runner
-          sudo chmod -R 755 /home/runner
-          
-          # Clone with depth 1 for speed
-          cd ~
-          rm -rf flood_of-noah
-          time git clone --depth 1 --single-branch https://github.com/benbenido025-lab/flood_of-noah
-          cd flood_of-noah
-          
-          # Clean install
-          rm -rf node_modules package-lock.json
-          
-          # Install with maximum performance
-          NODE_ENV=production npm install express axios socks puppeteer --save \
-            --prefer-online \
-            --no-audit \
-            --no-fund \
-            --loglevel=error
-          
-          # Configure Puppeteer for MAXIMUM performance
-          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--disable-software-rasterizer","--disable-extensions","--disable-background-networking","--disable-sync","--disable-translate","--hide-scrollbars","--metrics-recording-only","--mute-audio","--no-first-run","--safebrowsing-disable-auto-update","--disable-features=site-per-process","--disable-web-security","--aggressive-cache-discard","--disable-cache","--disable-application-cache","--disable-offline-load-stale-cache","--disk-cache-size=0","--no-zygote","--single-process"]}' > /home/runner/.config/puppeteer/config.json
-          
-          echo "✅ Flood of Noah installed - GOD MODE BUILD"
-
-      - name: Start Flood Service (Maximum Performance)
-        run: |
-          cd ~/flood_of-noah
-          
-          # ULTIMATE NODE.JS PERFORMANCE FLAGS
-          export NODE_OPTIONS="--max-old-space-size=8192"
-          export UV_THREADPOOL_SIZE=256
-          export NODE_ENV=production
-          
-          # Start with maximum priority
-          nohup node index.js > /tmp/flood-1.log 2>&1 &
-          FLOOD_PID=$!
-          
-          sleep 5
-          
-          if pgrep -f "node index.js" > /dev/null; then
-            echo "✅ Flood of Noah RUNNING (PID: $FLOOD_PID)"
-            echo "🔥 Service at MAXIMUM performance"
-            echo "📍 API: http://localhost:3000"
-          else
-            echo "❌ Failed to start - check logs"
-            cat /tmp/flood-1.log
-            exit 1
-          fi
-
-      - name: Display God-Mode System Stats
-        run: |
-          PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
-          TOTAL_RAM=$(free -h | awk '/^Mem:/ {print $2}')
-          AVAILABLE_RAM=$(free -h | awk '/^Mem:/ {print $7}')
-          SWAP_TOTAL=$(free -h | awk '/^Swap:/ {print $2}')
-          CPU_CORES=$(nproc)
-          CPU_MODEL=$(lscpu | grep "Model name" | cut -d':' -f2 | xargs)
-          DISK_SPACE=$(df -h / | awk 'NR==2 {print $4}')
-          NETWORK_SPEED=$(cat /sys/class/net/eth0/speed 2>/dev/null || echo "N/A")
-          
-          echo ""
-          echo "╔══════════════════════════════════════════════════════════╗"
-          echo "║         FLOOD INSTANCE #1 - GOD MODE ACTIVE              ║"
-          echo "╠══════════════════════════════════════════════════════════╣"
-          echo "║ Status         : 🔥 MAXIMUM PERFORMANCE"
-          echo "║ Public IP      : $PUBLIC_IP"
-          echo "║ Flood API      : http://localhost:3000"
-          echo "║ -------------------------------------------------------- ║"
-          echo "║ CPU Model      : $CPU_MODEL"
-          echo "║ CPU Cores      : $CPU_CORES cores (PERFORMANCE MODE)"
-          echo "║ Total RAM      : $TOTAL_RAM"
-          echo "║ Available RAM  : $AVAILABLE_RAM"
-          echo "║ Swap Space     : $SWAP_TOTAL (GOD-TIER)"
-          echo "║ Disk Available : $DISK_SPACE"
-          echo "║ Network Speed  : $NETWORK_SPEED Mbps"
-          echo "║ -------------------------------------------------------- ║"
-          echo "║ Node Memory    : 8GB allocated"
-          echo "║ Thread Pool    : 256 threads"
-          echo "║ TCP Mode       : BBR (ultra-fast)"
-          echo "║ Process Nice   : -20 (maximum priority)"
-          echo "╚══════════════════════════════════════════════════════════╝"
-          echo ""
-
-      - name: Keep Alive with Advanced Monitoring
-        run: |
-          START=$(date +%s)
-          DURATION=$((${{ github.event.inputs.session_duration }} * 60))
-          END=$((START + DURATION))
-          echo "🔥 GOD MODE Instance 1 - Running for ${{ github.event.inputs.session_duration }} minutes"
-          
-          COUNTER=0
-          RESTART_COUNT=0
-          LAST_RESTART=0
-          
-          while [ $(date +%s) -lt $END ]; do
-            COUNTER=$((COUNTER + 1))
-            NOW=$(date +%s)
-            ELAPSED=$(((NOW - START) / 60))
-            REMAIN=$(((END - NOW) / 60))
-            
-            # Check service health
-            if pgrep -f "node index.js" > /dev/null; then
-              STATUS="🔥 RUNNING"
-            else
-              STATUS="⚡ AUTO-RESTARTING"
-              RESTART_COUNT=$((RESTART_COUNT + 1))
-              LAST_RESTART=$NOW
-              
-              cd ~/flood_of-noah
-              export NODE_OPTIONS="--max-old-space-size=8192"
-              export UV_THREADPOOL_SIZE=256
-              export NODE_ENV=production
-              
-              nohup node index.js > /tmp/flood-1.log 2>&1 &
-              sleep 3
-              echo "   🔄 Service restarted (Total restarts: $RESTART_COUNT)"
-            fi
-            
-            # Detailed stats every 5 minutes
-            if [ $((COUNTER % 5)) -eq 0 ]; then
-              MEM_USED=$(free -h | awk '/^Mem:/ {print $3}')
-              MEM_PERCENT=$(free | awk '/^Mem:/ {printf "%.1f", $3/$2 * 100}')
-              SWAP_USED=$(free -h | awk '/^Swap:/ {print $3}')
-              CPU_LOAD=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}')
-              CONNECTIONS=$(ss -s | grep TCP: | awk '{print $2}')
-              
-              echo ""
-              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-              echo "🔥 INSTANCE 1 | ${ELAPSED}m elapsed / ${REMAIN}m remaining"
-              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-              echo "   Service Status : $STATUS"
-              echo "   Total Restarts : $RESTART_COUNT"
-              echo "   Memory Used    : $MEM_USED (${MEM_PERCENT}%)"
-              echo "   Swap Used      : $SWAP_USED"
-              echo "   CPU Load       : $CPU_LOAD"
-              echo "   TCP Conns      : $CONNECTIONS"
-              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-              echo ""
-            else
-              echo "🔥 Instance 1 | ${ELAPSED}m / ${REMAIN}m | $STATUS"
-            fi
-            
-            sleep 60
-          done
-          
-          echo ""
-          echo "✅ Session completed - Total restarts: $RESTART_COUNT"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          pkill -f "node index.js" || true
-          echo "🧹 Instance 1 cleaned up"
-
-  flood-instance-2:
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
-    if: ${{ fromJSON(github.event.inputs.instance_count) >= 2 }}
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
     
-    steps:
-      - name: Setup Instance 2
-        run: |
-          echo "================================"
-          echo "  FLOOD INSTANCE #2 - GOD MODE"
-          echo "================================"
-
-      - name: God-Tier System Optimization
-        run: |
-          echo "⚡ ACTIVATING GOD MODE PERFORMANCE..."
-          sudo swapoff -a
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 status=progress
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "✅ 16GB SWAP ACTIVATED"
-          
-          sudo sysctl -w net.core.rmem_max=268435456 2>/dev/null || true
-          sudo sysctl -w net.core.wmem_max=268435456 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 134217728' 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 134217728' 2>/dev/null || true
-          sudo sysctl -w net.core.netdev_max_backlog=10000 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192 2>/dev/null || true
-          sudo sysctl -w net.core.somaxconn=8192 2>/dev/null || true
-          sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535' 2>/dev/null || true
-          echo "✅ NETWORK OPTIMIZED TO MAXIMUM"
-          
-          echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
-          sudo sysctl -w kernel.sched_migration_cost_ns=5000000 2>/dev/null || true
-          sudo sysctl -w fs.file-max=2097152 2>/dev/null || true
-          sudo sysctl -w vm.swappiness=10 2>/dev/null || true
-          echo "✅ CPU & SYSTEM OPTIMIZED"
-          echo "🔥🔥🔥 GOD MODE ACTIVATED 🔥🔥🔥"
-
-      - name: Install High-Performance Dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl wget git nano htop iftop iotop nethogs \
-            build-essential libssl-dev python3-pip speedtest-cli
-          echo "✅ Dependencies installed"
-
-      - name: Install Node.js (Ultra-Fast)
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-          npm config set fetch-retries 10
-          npm config set maxsockets 100
-          echo "✅ Node.js $(node --version) - GOD MODE"
-
-      - name: Install Flood of Noah
-        run: |
-          sudo mkdir -p /home/runner/.config/puppeteer
-          sudo chown -R $(whoami):$(whoami) /home/runner
-          cd ~
-          rm -rf flood_of-noah
-          git clone --depth 1 https://github.com/benbenido025-lab/flood_of-noah
-          cd flood_of-noah
-          rm -rf node_modules package-lock.json
-          NODE_ENV=production npm install express axios socks puppeteer --save --prefer-online --no-audit --no-fund
-          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--no-zygote","--single-process"]}' > /home/runner/.config/puppeteer/config.json
-          echo "✅ Flood installed - GOD MODE"
-
-      - name: Start Flood Service
-        run: |
-          cd ~/flood_of-noah
-          export NODE_OPTIONS="--max-old-space-size=8192"
-          export UV_THREADPOOL_SIZE=256
-          nohup node index.js > /tmp/flood-2.log 2>&1 &
-          sleep 5
-          if pgrep -f "node index.js" > /dev/null; then
-            echo "✅ Flood RUNNING at MAXIMUM performance"
-          else
-            exit 1
-          fi
-
-      - name: Display Stats
-        run: |
-          PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
-          echo "╔══════════════════════════════════════════════════════════╗"
-          echo "║         FLOOD INSTANCE #2 - GOD MODE ACTIVE              ║"
-          echo "╠══════════════════════════════════════════════════════════╣"
-          echo "║ Status    : 🔥 MAXIMUM PERFORMANCE"
-          echo "║ Public IP : $PUBLIC_IP"
-          echo "║ RAM       : $(free -h | awk '/^Mem:/ {print $2}') | Swap: 16GB"
-          echo "║ Cores     : $(nproc) (PERFORMANCE MODE)"
-          echo "╚══════════════════════════════════════════════════════════╝"
-
-      - name: Keep Alive
-        run: |
-          START=$(date +%s)
-          DURATION=$((${{ github.event.inputs.session_duration }} * 60))
-          END=$((START + DURATION))
-          COUNTER=0
-          RESTART_COUNT=0
-          while [ $(date +%s) -lt $END ]; do
-            COUNTER=$((COUNTER + 1))
-            ELAPSED=$((($(date +%s) - START) / 60))
-            REMAIN=$(((END - $(date +%s)) / 60))
-            if pgrep -f "node index.js" > /dev/null; then
-              STATUS="🔥 RUNNING"
-            else
-              RESTART_COUNT=$((RESTART_COUNT + 1))
-              cd ~/flood_of-noah
-              export NODE_OPTIONS="--max-old-space-size=8192"
-              export UV_THREADPOOL_SIZE=256
-              nohup node index.js > /tmp/flood-2.log 2>&1 &
-              sleep 3
-              STATUS="⚡ RESTARTED"
-            fi
-            if [ $((COUNTER % 5)) -eq 0 ]; then
-              echo "🔥 Instance 2 | ${ELAPSED}m / ${REMAIN}m | $STATUS | Restarts: $RESTART_COUNT"
-            else
-              echo "🔥 Instance 2 | ${ELAPSED}m / ${REMAIN}m | $STATUS"
-            fi
-            sleep 60
-          done
-
-      - name: Cleanup
-        if: always()
-        run: |
-          pkill -f "node index.js" || true
-          echo "🧹 Instance 2 cleaned up"
-
-  flood-instance-3:
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(github.event.inputs.session_duration) }}
-    if: ${{ fromJSON(github.event.inputs.instance_count) >= 3 }}
+    - name: 🔧 Setup Ubuntu Environment
+      run: |
+        echo "╔════════════════════════════════════╗"
+        echo "║     UBUNTU VPS + TAILSCALE         ║"
+        echo "╚════════════════════════════════════╝"
+        
+        # Update system
+        sudo apt-get update -y
+        sudo apt-get upgrade -y
+        
+        # Install essential tools (minimal)
+        sudo apt-get install -y \
+          curl \
+          wget \
+          git \
+          vim \
+          nano \
+          htop \
+          tmux \
+          screen \
+          build-essential \
+          python3 \
+          python3-pip \
+          docker.io \
+          net-tools \
+          iputils-ping \
+          openssh-server \
+          fail2ban \
+          ufw
+        
+        echo "✅ Base system ready"
     
-    steps:
-      - name: Setup Instance 3
-        run: |
-          echo "================================"
-          echo "  FLOOD INSTANCE #3 - GOD MODE"
-          echo "================================"
+    - name: 🔗 Install & Configure Tailscale
+      env:
+        TAILSCALE_KEY: ${{ secrets.TAILSCALE_KEY }}
+      run: |
+        if [ -z "$TAILSCALE_KEY" ]; then
+          echo "⚠️ No TAILSCALE_KEY found - using your provided key"
+          TAILSCALE_KEY="tskey-auth-kiczyMxmPm11CNTRL-wWZxz1Ng2hJyqrmgHAq7iJomN6hz2je9F"
+        fi
+        
+        # Install Tailscale
+        curl -fsSL https://tailscale.com/install.sh | sh
+        
+        # Connect to your tailnet
+        sudo tailscale up --authkey $TAILSCALE_KEY --hostname="github-vps-$(date +%s)"
+        
+        # Wait for connection
+        sleep 5
+        
+        # Get Tailscale IP
+        TAILSCALE_IP=$(tailscale ip -4)
+        TAILSCALE_HOSTNAME=$(tailscale status | grep $TAILSCALE_IP | awk '{print $2}')
+        
+        echo "══════════════════════════════════════════" >> $GITHUB_STEP_SUMMARY
+        echo "🔑 TAILSCALE CONNECTION INFO" >> $GITHUB_STEP_SUMMARY
+        echo "══════════════════════════════════════════" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🌐 Tailscale IP: \`$TAILSCALE_IP\`" >> $GITHUB_STEP_SUMMARY
+        echo "📛 Hostname: \`$TAILSCALE_HOSTNAME\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "💻 SSH Access (from your Tailscale-connected machine):" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "ssh runner@$TAILSCALE_IP" >> $GITHUB_STEP_SUMMARY
+        echo "# OR" >> $GITHUB_STEP_SUMMARY
+        echo "ssh runner@$TAILSCALE_HOSTNAME" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🔐 Default password: \`ubuntuvps123\` (CHANGE IT!)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📊 Tailscale Status:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        tailscale status >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "══════════════════════════════════════════" >> $GITHUB_STEP_SUMMARY
+    
+    - name: 👤 Setup User & SSH
+      run: |
+        # Create user (GitHub Actions uses 'runner' user)
+        USERNAME="runner"
+        
+        # Set password (CHANGE THIS!)
+        echo "runner:ubuntuvps123" | sudo chpasswd
+        
+        # Configure SSH for better security
+        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/' /etc/ssh/sshd_config
+        
+        # Add your SSH key if you want (optional - replace with your public key)
+        # mkdir -p /home/runner/.ssh
+        # echo "ssh-rsa YOUR_PUBLIC_KEY_HERE" >> /home/runner/.ssh/authorized_keys
+        # chmod 600 /home/runner/.ssh/authorized_keys
+        # chown -R runner:runner /home/runner/.ssh
+        
+        # Restart SSH
+        sudo systemctl restart ssh
+        
+        echo "✅ SSH configured for user: $USERNAME"
+    
+    - name: 🐳 Setup Docker
+      run: |
+        # Start Docker
+        sudo systemctl start docker
+        sudo usermod -aG docker runner
+        
+        # Pull some useful images
+        docker pull nginx:alpine
+        docker pull python:3.11-slim
+        docker pull node:18-alpine
+        docker pull postgres:15
+        docker pull redis:alpine
+        docker pull mongo:latest
+        
+        echo "✅ Docker ready"
+    
+    - name: 📁 Create Workspace
+      run: |
+        # Create project structure
+        mkdir -p /home/runner/workspace/{projects,data,scripts,logs}
+        chown -R runner:runner /home/runner/workspace
+        
+        # Create welcome message
+        cat > /home/runner/welcome.txt << 'EOF'
+╔══════════════════════════════════════════════╗
+║     UBUNTU VPS - CONNECTED VIA TAILSCALE     ║
+╚══════════════════════════════════════════════╝
 
-      - name: God-Tier System Optimization
-        run: |
-          echo "⚡ ACTIVATING GOD MODE PERFORMANCE..."
-          sudo swapoff -a
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 status=progress
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "✅ 16GB SWAP ACTIVATED"
-          
-          sudo sysctl -w net.core.rmem_max=268435456 2>/dev/null || true
-          sudo sysctl -w net.core.wmem_max=268435456 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 134217728' 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 134217728' 2>/dev/null || true
-          sudo sysctl -w net.core.netdev_max_backlog=10000 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 2>/dev/null || true
-          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=8192 2>/dev/null || true
-          sudo sysctl -w net.core.somaxconn=8192 2>/dev/null || true
-          sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535' 2>/dev/null || true
-          echo "✅ NETWORK OPTIMIZED TO MAXIMUM"
-          
-          echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
-          sudo sysctl -w kernel.sched_migration_cost_ns=5000000 2>/dev/null || true
-          sudo sysctl -w fs.file-max=2097152 2>/dev/null || true
-          sudo sysctl -w vm.swappiness=10 2>/dev/null || true
-          echo "✅ CPU & SYSTEM OPTIMIZED"
-          echo "🔥🔥🔥 GOD MODE ACTIVATED 🔥🔥🔥"
+Quick Commands:
+  📊 System: htop, df -h, free -h, neofetch
+  🐳 Docker: docker ps, docker-compose up
+  📁 Files: cd ~/workspace
+  🔧 Tools: python3, node, git, vim, tmux
 
-      - name: Install High-Performance Dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl wget git nano htop iftop iotop nethogs \
-            build-essential libssl-dev python3-pip speedtest-cli
-          echo "✅ Dependencies installed"
-
-      - name: Install Node.js (Ultra-Fast)
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-          npm config set fetch-retries 10
-          npm config set maxsockets 100
-          echo "✅ Node.js $(node --version) - GOD MODE"
-
-      - name: Install Flood of Noah
-        run: |
-          sudo mkdir -p /home/runner/.config/puppeteer
-          sudo chown -R $(whoami):$(whoami) /home/runner
-          cd ~
-          rm -rf flood_of-noah
-          git clone --depth 1 https://github.com/benbenido025-lab/flood_of-noah
-          cd flood_of-noah
-          rm -rf node_modules package-lock.json
-          NODE_ENV=production npm install express axios socks puppeteer --save --prefer-online --no-audit --no-fund
-          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--no-zygote","--single-process"]}' > /home/runner/.config/puppeteer/config.json
-          echo "✅ Flood installed - GOD MODE"
-
-      - name: Start Flood Service
-        run: |
-          cd ~/flood_of-noah
-          export NODE_OPTIONS="--max-old-space-size=8192"
-          export UV_THREADPOOL_SIZE=256
-          nohup node index.js > /tmp/flood-3.log 2>&1 &
-          sleep 5
-          if pgrep -f "node index.js" > /dev/null; then
-            echo "✅ Flood RUNNING at MAXIMUM performance"
-          else
-            exit 1
-          fi
-
-      - name: Display Stats
-        run: |
-          PUBLIC_IP=$(curl -s ifconfig.me || echo "N/A")
-          echo "╔══════════════════════════════════════════════════════════╗"
-          echo "║         FLOOD INSTANCE #3 - GOD MODE ACTIVE              ║"
-          echo "╠══════════════════════════════════════════════════════════╣"
-          echo "║ Status    : 🔥 MAXIMUM PERFORMANCE"
-          echo "║ Public IP : $PUBLIC_IP"
-          echo "║ RAM       : $(free -h | awk '/^Mem:/ {print $2}') | Swap: 16GB"
-          echo "║ Cores     : $(nproc) (PERFORMANCE MODE)"
-          echo "╚══════════════════════════════════════════════════════════╝"
-
-      - name: Keep Alive
-        run: |
-          START=$(date +%s)
-          DURATION=$((${{ github.event.inputs.session_duration }} * 60))
-          END=$((START + DURATION))
-          COUNTER=0
-          RESTART_COUNT=0
-          while [ $(date +%s) -lt $END ]; do
-            COUNTER=$((COUNTER + 1))
-            ELAPSED=$((($(date +%s) - START) / 60))
-            REMAIN=$(((END - $(date +%s)) / 60))
-            if pgrep -f "node index.js" > /dev/null; then
-              STATUS="🔥 RUNNING"
-            else
-              RESTART_COUNT=$((RESTART_COUNT + 1))
-              cd ~/flood_of-noah
-              export NODE_OPTIONS="--max-old-space-size=8192"
-              export UV_THREADPOOL_SIZE=256
-              nohup node index.js > /tmp/flood-3.log 2>&1 &
-              sleep 3
-              STATUS="⚡ RESTARTED"
-            fi
-            if [ $((COUNTER % 5)) -eq 0 ]; then
-              echo "🔥 Instance 3 | ${ELAPSED}m / ${REMAIN}m | $STATUS | Restarts: $RESTART_COUNT"
-            else
-              echo "🔥 Instance 3 | ${ELAPSED}m / ${REMAIN}m | $STATUS"
-            fi
-            sleep 60
-          done
-
-      - name: Cleanup
-        if: always()
-        run: |
-          pkill -f "node index.js" || true
-          echo "🧹 Instance 3 cleaned up"
+Your Tailscale IP will be shown in the job summary above!
+EOF
+        
+        chown runner:runner /home/runner/welcome.txt
+        
+        # Add to .bashrc
+        echo "cat /home/runner/welcome.txt" >> /home/runner/.bashrc
+        
+        echo "✅ Workspace ready"
+    
+    - name: 🔄 Keep Alive Service
+      run: |
+        # Create keep-alive script
+        cat > /home/runner/keepalive.sh << 'EOF'
+#!/bin/bash
+while true; do
+    echo "[$(date)] Heartbeat - GitHub VPS running via Tailscale"
+    # Light work to keep CPU active
+    uptime
+    tailscale status
+    sleep 300  # 5 minutes
+done
+EOF
+        
+        chmod +x /home/runner/keepalive.sh
+        chown runner:runner /home/runner/keepalive.sh
+        
+        # Run in background
+        sudo -u runner bash -c "nohup /home/runner/keepalive.sh > /home/runner/keepalive.log 2>&1 &"
+        
+        echo "✅ Keep-alive service started"
+    
+    - name: 📝 Display Final Info
+      run: |
+        TAILSCALE_IP=$(tailscale ip -4)
+        TAILSCALE_HOSTNAME=$(tailscale status | grep $TAILSCALE_IP | awk '{print $2}')
+        
+        echo "══════════════════════════════════════════"
+        echo "✅ VPS READY - CONNECTED TO TAILSCALE!"
+        echo "══════════════════════════════════════════"
+        echo ""
+        echo "🌐 Tailscale IP: $TAILSCALE_IP"
+        echo "📛 Hostname: $TAILSCALE_HOSTNAME"
+        echo ""
+        echo "💻 SSH COMMAND (from your machine with Tailscale):"
+        echo "  ssh runner@$TAILSCALE_IP"
+        echo "  # OR"
+        echo "  ssh runner@$TAILSCALE_HOSTNAME"
+        echo ""
+        echo "🔐 Password: ubuntuvps123"
+        echo ""
+        echo "📋 To change password:"
+        echo "  ssh runner@$TAILSCALE_IP"
+        echo "  passwd"
+        echo ""
+        echo "🛑 To stop this VPS, just cancel the GitHub Action"
+        echo ""
+        echo "══════════════════════════════════════════"
+        
+        # Save to file for later reference
+        echo "Tailscale IP: $TAILSCALE_IP" > tailscale_info.txt
+        echo "Hostname: $TAILSCALE_HOSTNAME" >> tailscale_info.txt
+        
+        # Upload as artifact
+        echo "✅ Info saved as artifact"
+    
+    - name: 📤 Upload connection info
+      uses: actions/upload-artifact@v4
+      with:
+        name: tailscale-connection-info
+        path: tailscale_info.txt
+    
+    - name: ⏳ Keep Running
+      run: |
+        echo "🔄 VPS is running. Will stay alive for 6 hours..."
+        echo "Press Ctrl+C to stop (in Actions tab, click Cancel)"
+        
+        # Keep the job running
+        while true; do
+          sleep 60
+          echo "[$(date)] Heartbeat - VPS still alive on Tailscale: $(tailscale ip -4)"
+        done
