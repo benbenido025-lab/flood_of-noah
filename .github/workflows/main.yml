@@ -1,8 +1,6 @@
 name: Ubuntu VPS with Tailscale
-
 on:
   workflow_dispatch:
-
 jobs:
   vps:
     runs-on: ubuntu-latest
@@ -16,7 +14,38 @@ jobs:
         run: |
           echo "🚀 Starting Ubuntu VPS..."
           sudo apt-get update
-          sudo apt-get install -y curl wget git vim nano htop tmux python3 python3-pip openssh-server net-tools iputils-ping
+          sudo apt-get install -y curl wget git vim nano htop tmux python3 python3-pip openssh-server net-tools iputils-ping neofetch
+
+      - name: Optimize Network (Speed Boost)
+        run: |
+          echo "⚡ Applying network optimizations..."
+          sudo sysctl -w net.core.rmem_max=134217728
+          sudo sysctl -w net.core.wmem_max=134217728
+          sudo sysctl -w net.ipv4.tcp_rmem="4096 87380 134217728"
+          sudo sysctl -w net.ipv4.tcp_wmem="4096 65536 134217728"
+          sudo sysctl -w net.core.netdev_max_backlog=250000
+          sudo sysctl -w net.ipv4.tcp_window_scaling=1
+          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
+          sudo sysctl -w net.core.default_qdisc=fq
+          sudo sysctl -w net.ipv4.tcp_fastopen=3
+          echo "✅ Network optimized!"
+
+      - name: Install Node.js & npm Packages
+        run: |
+          echo "📦 Installing Node.js..."
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          echo "📦 Installing hpack, cookie-parser, and io-http globally..."
+          sudo npm install -g hpack cookie-parser iohttp
+          echo "✅ Node packages installed!"
+          node -v
+          npm -v
+
+      - name: Install Python Packages
+        run: |
+          echo "🐍 Installing Python packages..."
+          pip3 install aiohttp --break-system-packages || pip3 install aiohttp
+          echo "✅ Python packages installed!"
       
       - name: Install Tailscale
         run: |
@@ -45,6 +74,15 @@ jobs:
           echo "🔐 PASSWORD: ubuntuvps123"
           echo ""
           echo "🌐 TAILSCALE IP: ${{ env.TAILSCALE_IP }}"
+          echo ""
+          neofetch
+          echo ""
+          echo "📦 INSTALLED PACKAGES:"
+          echo "  • neofetch     ✅"
+          echo "  • hpack        ✅"
+          echo "  • cookie-parser✅"
+          echo "  • iohttp       ✅"
+          echo "  • aiohttp      ✅"
           echo ""
           echo "══════════════════════════════════════════"
       
