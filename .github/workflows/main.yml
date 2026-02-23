@@ -35,15 +35,15 @@ jobs:
           echo "📦 Installing Node.js..."
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
-          echo "📦 Installing hpack, cookie-parser, and io-http globally..."
-          sudo npm install -g hpack cookie-parser iohttp
+          echo "📦 Installing hpack and cookie-parser globally..."
+          sudo npm install -g hpack cookie-parser node-fetch axios
           echo "✅ Node packages installed!"
           node -v
           npm -v
 
       - name: Install Python Packages
         run: |
-          echo "🐍 Installing Python packages..."
+          echo "🐍 Installing Python aiohttp..."
           pip3 install aiohttp --break-system-packages || pip3 install aiohttp
           echo "✅ Python packages installed!"
       
@@ -78,11 +78,12 @@ jobs:
           neofetch
           echo ""
           echo "📦 INSTALLED PACKAGES:"
-          echo "  • neofetch     ✅"
-          echo "  • hpack        ✅"
-          echo "  • cookie-parser✅"
-          echo "  • iohttp       ✅"
-          echo "  • aiohttp      ✅"
+          echo "  • neofetch      ✅ (apt)"
+          echo "  • hpack         ✅ (npm)"
+          echo "  • cookie-parser ✅ (npm)"
+          echo "  • node-fetch    ✅ (npm)"
+          echo "  • axios         ✅ (npm)"
+          echo "  • aiohttp       ✅ (pip)"
           echo ""
           echo "══════════════════════════════════════════"
       
