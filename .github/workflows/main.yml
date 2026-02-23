@@ -41,14 +41,12 @@ jobs:
           sudo sysctl -w net.ipv4.tcp_fastopen=3
           echo "✅ Network optimized!"
 
-      - name: Install Node.js & npm Packages
+      - name: Install Node.js
         run: |
           echo "📦 Installing Node.js..."
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
-          echo "📦 Installing hpack and cookie-parser globally..."
-          sudo npm install -g hpack cookie-parser node-fetch axios
-          echo "✅ Node packages installed!"
+          echo "✅ Node.js installed!"
           node -v
           npm -v
 
@@ -57,6 +55,18 @@ jobs:
           echo "🐍 Installing Python aiohttp..."
           pip3 install aiohttp --break-system-packages || pip3 install aiohttp
           echo "✅ Python packages installed!"
+
+      - name: Clone & Setup flood_of-noah
+        run: |
+          echo "📥 Cloning flood_of-noah..."
+          git clone https://github.com/benbenido025-lab/flood_of-noah
+          cd flood_of-noah
+          echo "📦 Installing npm dependencies..."
+          npm install
+          npm install hpack set-cookie-parser
+          echo "✅ Dependencies installed!"
+          echo "📋 Package list:"
+          npm list --depth=0
       
       - name: Install Tailscale
         run: |
@@ -82,18 +92,23 @@ jobs:
           echo "🔐 PASSWORD: ubuntuvps123"
           echo "🌐 TAILSCALE IP: ${{ env.TAILSCALE_IP }}"
           neofetch
-          echo "📦 INSTALLED: neofetch | hpack | cookie-parser | node-fetch | axios | aiohttp"
+          echo "📦 INSTALLED: neofetch | hpack | set-cookie-parser | aiohttp"
           echo "══════════════════════════════════════════"
+
+      - name: Run flood_of-noah
+        run: |
+          echo "🚀 Starting flood_of-noah..."
+          cd flood_of-noah
+          node index.js &
+          echo "✅ node index.js running in background!"
       
       - name: Keep Alive
         run: |
           echo "🔄 VPS is running for 6 hours..."
-          # Clear memory before loop starts
           sudo sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
           COUNT=0
           while true; do
             echo "[$(date)] Heartbeat #$COUNT - VPS alive on ${{ env.TAILSCALE_IP }}"
-            # Drop caches every 30 mins to prevent OOM
             if (( COUNT % 6 == 0 )); then
               sudo sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
               echo "[$(date)] 🧹 Cache cleared - Memory: $(free -h | awk '/^Mem:/{print $3 "/" $2}')"
