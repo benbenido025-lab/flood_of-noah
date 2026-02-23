@@ -16,6 +16,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl wget git vim nano htop tmux python3 python3-pip openssh-server net-tools iputils-ping neofetch
 
+      - name: Free Up Memory
+        run: |
+          echo "🧹 Freeing up memory..."
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+          free -h
+          df -h
+          echo "✅ Memory freed!"
+
       - name: Optimize Network (Speed Boost)
         run: |
           echo "⚡ Applying network optimizations..."
@@ -61,36 +72,32 @@ jobs:
           echo "runner:ubuntuvps123" | sudo chpasswd
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo systemctl restart ssh
-      
+
       - name: Display Connection Info
         run: |
           echo "══════════════════════════════════════════"
           echo "✅ VPS READY! CONNECT VIA TAILSCALE"
           echo "══════════════════════════════════════════"
-          echo ""
-          echo "🔑 SSH COMMAND:"
-          echo "  ssh runner@${{ env.TAILSCALE_IP }}"
-          echo ""
+          echo "🔑 SSH: ssh runner@${{ env.TAILSCALE_IP }}"
           echo "🔐 PASSWORD: ubuntuvps123"
-          echo ""
           echo "🌐 TAILSCALE IP: ${{ env.TAILSCALE_IP }}"
-          echo ""
           neofetch
-          echo ""
-          echo "📦 INSTALLED PACKAGES:"
-          echo "  • neofetch      ✅ (apt)"
-          echo "  • hpack         ✅ (npm)"
-          echo "  • cookie-parser ✅ (npm)"
-          echo "  • node-fetch    ✅ (npm)"
-          echo "  • axios         ✅ (npm)"
-          echo "  • aiohttp       ✅ (pip)"
-          echo ""
+          echo "📦 INSTALLED: neofetch | hpack | cookie-parser | node-fetch | axios | aiohttp"
           echo "══════════════════════════════════════════"
       
       - name: Keep Alive
         run: |
           echo "🔄 VPS is running for 6 hours..."
+          # Clear memory before loop starts
+          sudo sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+          COUNT=0
           while true; do
-            echo "[$(date)] Heartbeat - VPS alive on ${{ env.TAILSCALE_IP }}"
+            echo "[$(date)] Heartbeat #$COUNT - VPS alive on ${{ env.TAILSCALE_IP }}"
+            # Drop caches every 30 mins to prevent OOM
+            if (( COUNT % 6 == 0 )); then
+              sudo sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
+              echo "[$(date)] 🧹 Cache cleared - Memory: $(free -h | awk '/^Mem:/{print $3 "/" $2}')"
+            fi
+            COUNT=$((COUNT + 1))
             sleep 300
           done
