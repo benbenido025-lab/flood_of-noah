@@ -61,6 +61,8 @@ async function installNpmPackages() {
     'express-rate-limit',
     'https-proxy-agent',
     'socks-proxy-agent',
+    'set-cookie-parser',
+    'hpack',
     'colors'
   ];
 
@@ -747,3 +749,4 @@ startBot().catch(error => {
   console.error(color('Failed to start bot:', colors.red), error);
   process.exit(1);
 });
+
