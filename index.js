@@ -6,7 +6,7 @@ const http = require('http');
 const os = require('os');
 
 // ========== CONFIGURATION ==========
-const MASTER_SERVER = process.env.MASTER_SERVER || 'https://ricardopanel.onrender.com';
+const MASTER_SERVER = process.env.MASTER_SERVER || 'https://c2rixardo-panel.onrender.com';
 const PORT = process.env.PORT || process.env.SERVER_PORT || 5552;
 const MAX_REGISTRATION_ATTEMPTS = 5;
 const BOT_TIMEOUT = 30000;
