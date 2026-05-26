@@ -6,7 +6,7 @@ const http = require('http');
 const os = require('os');
 
 // ========== CONFIGURATION ==========
-const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah.onrender.com';
+const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah-7bs7.onrender.com';
 const PORT = process.env.PORT || process.env.SERVER_PORT || 5552;
 const MAX_REGISTRATION_ATTEMPTS = 5;
 const BOT_TIMEOUT = 30000;
