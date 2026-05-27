@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json());
 
 const port = process.env.PORT || 5553;
-const AUTH_TOKEN = process.env.AUTH_TOKEN || crypto.randomBytes(32).toString('hex'); // Generate random token if not set
+const AUTH_TOKEN = "ricardo";// Generate random token if not set
 
 // Rate limiting
 const limiter = rateLimit({
