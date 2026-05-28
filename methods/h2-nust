@@ -1,0 +1,1 @@
+console.log('[H2-NUST] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);
