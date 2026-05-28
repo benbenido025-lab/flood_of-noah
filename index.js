@@ -122,14 +122,14 @@ function createMethodScripts() {
     }
   };
 
-  // C# stub that sleeps (will be replaced by real .cs later)
+  // FIXED: use toUpperCase() instead of ToUpper
   const csStub = (name) => `using System;
 class ${name} {
     static void Main(string[] args) {
-        Console.WriteLine("[${name.ToUpper()}] Starting attack (C# stub)");
+        Console.WriteLine("[${name.toUpperCase()}] Starting attack (C# stub)");
         int time = args.Length > 1 ? int.Parse(args[1]) : 60;
         System.Threading.Thread.Sleep(time * 1000);
-        Console.WriteLine("[${name.ToUpper()}] Attack complete");
+        Console.WriteLine("[${name.toUpperCase()}] Attack complete");
     }
 }`;
 
@@ -189,7 +189,6 @@ function getMethodFilename(method) {
     'RAW-GET': 'raw-get'
   };
   if (methodMap[method]) return methodMap[method];
-  // default: lowercase, replace spaces/dots with hyphens
   return method.toLowerCase().replace(/[\s.]+/g, '-');
 }
 
