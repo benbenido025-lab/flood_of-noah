@@ -7,7 +7,7 @@ const os = require('os');
 const crypto = require('crypto');
 
 // ========== CONFIGURATION ==========
-const MASTER_SERVER = process.env.MASTER_SERVER || 'https://your-server.onrender.com'; // CHANGE THIS
+const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah-7bs7.onrender.com'; // CHANGE THIS
 const PORT = process.env.PORT || process.env.SERVER_PORT || 5552;
 const MAX_REGISTRATION_ATTEMPTS = 5;
 
