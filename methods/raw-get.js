@@ -10,7 +10,7 @@ const cluster = require('cluster');
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]) || 60,
-    threads: parseInt(process.argv[4]) || 10,
+    threads: parseInt(process.argv[4]) || 30,
     rate: parseInt(process.argv[5]) || 1000
 };
 
